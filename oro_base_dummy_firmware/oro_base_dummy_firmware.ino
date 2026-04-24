@@ -11,9 +11,9 @@ unsigned long last_fast_update = 0;     // 100ms
 unsigned long last_slow_update = 0;     // 1000ms
 unsigned long last_env_update = 0;      // 5000ms
 unsigned long last_display_refresh = 0; // 1000ms display refresh
-unsigned long last_hb_update = 0;       // 10000ms heartbeat
-unsigned long last_toggle_5s = 0;       // 5000ms toggle
-unsigned long last_toggle_8s = 0;       // 8000ms toggle
+unsigned long last_hb_update = 0;       // 1000ms heartbeat
+unsigned long last_toggle_5s = 0;       // 5000ms state toggle
+unsigned long last_toggle_8s = 0;       // 8000ms state toggle
 
 // ── Button Debouncing ────────────────────────────────────────────────────────
 bool last_button_reading = HIGH;
@@ -42,7 +42,7 @@ uint8_t led_state = 0;
 float sim_bowl1 = 0;
 float sim_bowl2 = 0;
 float sim_water_tank = 5.0f;
-uint8_t sim_water_bowl = 0;
+float sim_water_bowl = 0.5f;
 
 // ── Forward Declarations ────────────────────────────────────────────────────
 void sendAnalogPacket(SensorID id, float value, uint8_t priority = PRIO_LOW);
@@ -77,7 +77,7 @@ void loop() {
     sim_time += 0.1f;
   }
 
-  // 10000ms: Heartbeat
+  // 1000ms: Heartbeat
   if (now - last_hb_update >= 1000) {
     last_hb_update = now;
     sendHeartbeat();
@@ -96,13 +96,13 @@ void loop() {
     // Simulate Water levels
     // Tank is 5L, vary it slowly
     sim_water_tank = 5.0f - fmod(sim_time * 0.05f, 5.0f);
-    // Bowl toggles every 15s: 0 (Full), 1 (Not Full)
-    sim_water_bowl = ((int)(sim_time / 15.0f) % 2 == 0) ? 0 : 1;
+    // Bowl varies periodically
+    sim_water_bowl = 0.5f + 0.5f * sin(sim_time * 0.2f);
 
     // Published as float (via fixed-point * 100), but value is floored before
     // send
     sendAnalogPacket(SID_WATER_LEVEL, (float)((int)sim_water_tank));
-    sendDigitalPacket(SID_WATER_BOWL, sim_water_bowl);
+    sendAnalogPacket(SID_WATER_BOWL, sim_water_bowl);
 
     // Publish Encoder & Limit Switches
     sendEncoderPacket(SID_ENCODER, encoder_ticks);
@@ -212,6 +212,9 @@ void loop() {
 
     if (now - last_toggle_8s >= 8000) {
       last_toggle_8s = now;
+      //   lid2_open = !lid2_open;
+      //   sendPeripheralPacket(PID_LID2_STEPPER, lid2_open ? 1 : 0);
+
       camera_motor_state = !camera_motor_state;
       sendPeripheralPacket(PID_CAMERA_STEPPER, camera_motor_state ? 1 : 0);
     }
@@ -350,6 +353,21 @@ void processIncomingCommands() {
           // Publish current state feedback
           sendPeripheralPacket(PID_CAMERA_STEPPER,
                                (int32_t)(camera_angle * 100.0f));
+        } else if (id == PID_PUMP) {
+          pump_state = (val > 0);
+          sendPeripheralPacket(PID_PUMP, pump_state ? 1 : 0);
+        } else if (id == PID_LID1_STEPPER) {
+          lid1_open = (val > 0);
+          sendPeripheralPacket(PID_LID1_STEPPER, lid1_open ? 1 : 0);
+        } else if (id == PID_LID2_STEPPER) {
+          lid2_open = (val > 0);
+          sendPeripheralPacket(PID_LID2_STEPPER, lid2_open ? 1 : 0);
+        } else if (id == PID_DISPLAY) {
+          display_value = val / 100; // Reciprocal of fixed-point packing
+          sendPeripheralPacket(PID_DISPLAY, val);
+        } else if (id == PID_INDICATOR_LED) {
+          led_state = (uint8_t)(val / 100);
+          sendPeripheralPacket(PID_INDICATOR_LED, val);
         }
 
         // Always ACK the command back with same SEQ and ID
