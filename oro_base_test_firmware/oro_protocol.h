@@ -44,7 +44,8 @@ enum SensorID {
   SID_TEMPERATURE = 0x05,
   SID_LIMIT_SW1 = 0x06,
   SID_LIMIT_SW2 = 0x07,
-  SID_ENCODER = 0x08,
+
+  SID_ENCODER = 0x08, // TBD
   SID_HOME_SENSOR = 0x09,
   SID_POWER_SW = 0x0A,
   SID_BATTERY = 0x0B,
@@ -62,7 +63,6 @@ enum PeripheralID {
   PID_CAMERA_STEPPER = 0x03,
   PID_DISPLAY = 0x04,
   PID_INDICATOR_LED = 0x05,
-  PID_CAMERA_SERVO = 0x06,
 };
 // ── OroPacket: 8-byte fixed-size wire format
 // ────────────────────────────────

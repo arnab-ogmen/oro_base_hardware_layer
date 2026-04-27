@@ -38,6 +38,8 @@ bool camera_motor_state = false;
 int32_t display_value = 1234;
 uint8_t nav_button_state = 1; // 1: Bowl 1, 2: Bowl 2, 3: Tank
 uint8_t led_state = 0;
+float camera_servo_angle = 0.0f;
+uint8_t hall_sensors_state = 0;
 
 float sim_bowl1 = 0;
 float sim_bowl2 = 0;
@@ -147,6 +149,9 @@ void loop() {
             selected_val = (float)((int)sim_water_tank);
 
           sendPeripheralPacket(PID_DISPLAY, (int32_t)(selected_val * 100.0f));
+
+          // Also turn on the corresponding indicator LED (1, 2, or 3)
+          sendPeripheralPacket(PID_INDICATOR_LED, (int32_t)nav_button_state);
         }
       }
     }
@@ -166,9 +171,21 @@ void loop() {
 
       sendPeripheralPacket(PID_DISPLAY, (int32_t)(current_val * 100.0f));
 
-      // Also cycle LED indicator
-      led_state = (led_state % 10) + 1;
-      sendPeripheralPacket(PID_INDICATOR_LED, (int32_t)(led_state * 100));
+      // Periodically refresh current LED indicator state
+      sendPeripheralPacket(PID_INDICATOR_LED, (int32_t)nav_button_state);
+
+      // Send Lid 1 Hall Sensors (Bit 0: Closed, Bit 1: Opened)
+      uint8_t lid1_hall = (lid1_open ? 0x02 : 0x01);
+      sendDigitalPacket(SID_LID1_HALL, lid1_hall);
+
+      // Send Lid 2 Hall Sensors (Bit 0: Closed, Bit 1: Opened)
+      uint8_t lid2_hall = (lid2_open ? 0x02 : 0x01);
+      sendDigitalPacket(SID_LID2_HALL, lid2_hall);
+
+      // Simulate Camera Homing Sensor (LMSW)
+      // High if near 0 degrees
+      uint8_t home_state = (abs(camera_angle) < 1.0f) ? 1 : 0;
+      sendDigitalPacket(SID_HOME_SENSOR, home_state);
     }
 
     // 5000ms: Environment
@@ -368,6 +385,9 @@ void processIncomingCommands() {
         } else if (id == PID_INDICATOR_LED) {
           led_state = (uint8_t)(val / 100);
           sendPeripheralPacket(PID_INDICATOR_LED, val);
+        } else if (id == PID_CAMERA_SERVO) {
+          camera_servo_angle = (float)val / 100.0f;
+          sendPeripheralPacket(PID_CAMERA_SERVO, val);
         }
 
         // Always ACK the command back with same SEQ and ID
