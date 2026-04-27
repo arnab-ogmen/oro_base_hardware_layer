@@ -370,6 +370,7 @@ void LID1_StepperTask(void *pvParameters) {
     // Wait until some other task tells us to run the motor
     if (LID1_Control == true) {
 
+      sendPeripheralPacket(PID_LID1_STEPPER, 1, PRIO_HIGH); // Running
       if (stepper_direction == true) {
         // TRUE  -> Forward
         stepper_step(1, STEPPER_DIR_FORWARD);
@@ -379,6 +380,7 @@ void LID1_StepperTask(void *pvParameters) {
       }
 
       LID1_Control = false; // consume request
+      sendPeripheralPacket(PID_LID1_STEPPER, 0, PRIO_HIGH); // Idle
     }
 
     // Small delay so task does not hog CPU
@@ -393,6 +395,7 @@ void LID2_StepperTask(void *pvParameters) {
     // Wait until some other task tells us to run the motor
     if (LID2_Control == true) {
 
+      sendPeripheralPacket(PID_LID2_STEPPER, 1, PRIO_HIGH); // Running
       if (stepper_direction == true) {
         // TRUE  -> Forward
         stepper_step(2, STEPPER_DIR_FORWARD);
@@ -402,6 +405,7 @@ void LID2_StepperTask(void *pvParameters) {
       }
 
       LID2_Control = false; // consume request
+      sendPeripheralPacket(PID_LID2_STEPPER, 0, PRIO_HIGH); // Idle
     }
 
     // Small delay so task does not hog CPU
@@ -414,21 +418,23 @@ void LidHallTask(void *pvParameters) {
   (void)pvParameters;
   for (;;) {
     // Read Lid 1 Hall sensors from TCA expander
-    // Bit 0: Closed (Sensor 1), Bit 1: Opened (Sensor 2)
+    // 0: Closed (Sensor 1 active), 1: Opened (Sensor 2 active)
     uint8_t lid1_state = 0;
-    if (TCA.read1(LID1_HALL1_EXT) == LOW)
-      lid1_state |= 0x01;
-    if (TCA.read1(LID1_HALL2_EXT) == LOW)
-      lid1_state |= 0x02;
+    if (TCA.read1(LID1_HALL1_EXT) == LOW) {
+      lid1_state = 0; // Closed
+    } else if (TCA.read1(LID1_HALL2_EXT) == LOW) {
+      lid1_state = 1; // Open
+    }
     sendDigitalPacket(SID_LID1_HALL, lid1_state, PRIO_MED);
 
     // Read Lid 2 Hall sensors from TCA expander
-    // Bit 0: Closed (Sensor 3), Bit 1: Opened (Sensor 4)
+    // 0: Closed (Sensor 3 active), 1: Opened (Sensor 4 active)
     uint8_t lid2_state = 0;
-    if (TCA.read1(LID2_HALL1_EXT) == LOW)
-      lid2_state |= 0x01;
-    if (TCA.read1(LID2_HALL2_EXT) == LOW)
-      lid2_state |= 0x02;
+    if (TCA.read1(LID2_HALL1_EXT) == LOW) {
+      lid2_state = 0; // Closed
+    } else if (TCA.read1(LID2_HALL2_EXT) == LOW) {
+      lid2_state = 1; // Open
+    }
     sendDigitalPacket(SID_LID2_HALL, lid2_state, PRIO_MED);
 
     vTaskDelay(pdMS_TO_TICKS(100)); // Sample at 10Hz
