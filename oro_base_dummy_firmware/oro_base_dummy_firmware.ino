@@ -173,7 +173,8 @@ void DisplayTask(void *pvParameters) {
 
 void LidHallTask(void *pvParameters) {
   for (;;) {
-    // Lid Control: SID is ANALOG (0.0/1.0/3.0), PID is DIGITAL (0=idle, 1=running)
+    // Lid Control: SID is ANALOG (0.0/1.0/3.0), PID is DIGITAL (0=idle,
+    // 1=running)
     sendAnalogPacket(SID_LID1_HALL, (float)lid1_hall_state);
     sendPeripheralPacket(PID_LID1_STEPPER, lid1_motor_running ? 1 : 0);
 
@@ -453,7 +454,7 @@ void processIncomingCommands() {
           encoder_ticks = (int32_t)camera_angle;
           camera_motor_running = true;
           sendPeripheralPacket(PID_CAMERA_STEPPER, 1); // Motor running
-          registerAsyncAction(id, seq, 2000, val);     // Settle after 2s
+          registerAsyncAction(id, seq, 500, val);      // Settle after 0.5s
           break;
 
         case PID_PUMP:
