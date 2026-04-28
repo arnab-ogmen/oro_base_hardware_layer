@@ -64,6 +64,12 @@ enum PeripheralID {
   PID_INDICATOR_LED = 0x05,
   PID_CAMERA_SERVO = 0x06,
 };
+
+static const int32_t ACK_SUCCESS = 0;
+static const int32_t ACK_ERROR = 1;
+static const int32_t ACK_TIMEOUT = 2;
+static const int32_t ACK_BUSY = 3;
+static const int32_t ACK_INVALID = 4;
 // ── OroPacket: 8-byte fixed-size wire format
 // ────────────────────────────────
 struct OroPacket {

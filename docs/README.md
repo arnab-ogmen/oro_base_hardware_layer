@@ -140,7 +140,7 @@ packet-beta
 | Byte | Bits | Field | Encoding |
 |:---|:---|:---|:---|
 | 1 | `[7:6]` | Priority | `PRIO_LOW(0)` · `MED(1)` · `HIGH(2)` · `CRIT(3)` |
-| 1 | `[5:0]` | Message Type | `SENSOR_DATA(1)` · `PERIPHERAL_STATE(2)` · `HEARTBEAT(3)` · `COMMAND(4)` · `ACK(5)` |
+| 1 | `[5:0]` | Message Type | `SENSOR_DATA(1)` · `PERIPHERAL_STATE(2)` · `HEARTBEAT(3)` · `COMMAND(4)` · `ACK(5)` (Carries completion status) |
 | 2 | `[7:4]` | Sequence Number | 4-bit rolling counter (0–15) for command/ACK correlation |
 | 2 | `[3:0]` | ID | Sensor ID (SID) or Peripheral ID (PID) depending on msg_type |
 
@@ -240,7 +240,7 @@ The firmware runs a continuous `processIncomingCommands()` loop that:
 2. Validates CRC-8 on candidate 8-byte frame
 3. Extracts `MSG_COMMAND` packets → dispatches by PID
 4. Executes actuator logic (e.g., camera rotation ±90°)
-5. Sends `MSG_ACK` with matching sequence number and PID
+5. Sends `MSG_ACK` with matching sequence number and PID only after physical actuation completes (1–2s delay).
 
 ```mermaid
 sequenceDiagram
@@ -250,9 +250,9 @@ sequenceDiagram
     Host->>MCU: MSG_COMMAND [Seq=3, PID=3, Val=45.00°]
     MCU->>MCU: Clamp angle to ±90°
     MCU->>MCU: Update encoder_ticks
-    MCU-->>Host: MSG_PERIPHERAL_STATE [PID=3, Val=45.00°]
-    MCU-->>Host: MSG_ACK [Seq=3, PID=3, Val=4500]
-    Note over Host: Seq+PID match → command confirmed
+    MCU->>MCU: Simulation Delay (e.g., 2s)
+    MCU-->>Host: MSG_ACK [Seq=3, PID=3, Status=ACK_SUCCESS]
+    Note over Host: Seq+PID match → command confirmed after completion
 ```
 
 ---
