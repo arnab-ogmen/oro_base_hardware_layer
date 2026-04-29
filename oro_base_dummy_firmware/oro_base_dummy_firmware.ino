@@ -39,6 +39,7 @@ int32_t display_value = 1234;
 uint8_t nav_button_state = 1; // 1: Bowl 1, 2: Bowl 2, 3: Tank
 uint8_t led_state = 0;
 float camera_servo_angle = 0.0f;
+bool camera_servo_engaged = false;
 
 // Lid physical state (Hall sensor): 0=closed, 1=open, 3=transition
 uint8_t lid1_hall_state = 0;
@@ -183,7 +184,7 @@ void LidHallTask(void *pvParameters) {
 
     // Actuator Status (Periodic broadcast for UI visibility)
     sendPeripheralPacket(PID_CAMERA_STEPPER, camera_motor_running ? 1 : 0);
-    sendPeripheralPacket(PID_CAMERA_SERVO, camera_servo_running ? 1 : 0);
+    sendPeripheralPacket(PID_CAMERA_SERVO, camera_servo_engaged ? 1 : 0);
     sendPeripheralPacket(PID_PUMP, pump_state ? 1 : 0);
 
     // Camera Homing Sensor (LMSW)
@@ -280,7 +281,7 @@ void checkActiveActions() {
         sendPeripheralPacket(PID_LID2_STEPPER, 0); // Idle
       } else if (pid == PID_CAMERA_SERVO) {
         camera_servo_running = false;
-        sendPeripheralPacket(PID_CAMERA_SERVO, 0); // Idle
+        sendPeripheralPacket(PID_CAMERA_SERVO, camera_servo_engaged ? 1 : 0);
       } else if (pid == PID_PUMP) {
         sendPeripheralPacket(PID_PUMP, pump_state ? 1 : 0); // Final pump state
       }
@@ -494,8 +495,9 @@ void processIncomingCommands() {
           break;
 
         case PID_CAMERA_SERVO:
-          camera_servo_angle = (float)val / 100.0f;
+          camera_servo_engaged = (val > 0);
           camera_servo_running = true;
+          sendPeripheralPacket(PID_CAMERA_SERVO, camera_servo_engaged ? 1 : 0);
           registerAsyncAction(id, seq, 500, val); // Settle after 500ms
           break;
 
