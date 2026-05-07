@@ -6,6 +6,7 @@
 #include <Wire.h>
 #include <math.h>
 // #include <TM1637Display.h>
+#include <ESP32Servo.h>
 #include <SparkFun_Alphanumeric_Display.h>
 #include <TCA9555.h>
 
@@ -36,6 +37,8 @@ using namespace oro;
 #define LID2_HALL1_EXT 0
 #define LID2_HALL2_EXT 1
 
+#define CAM_HEAD_HOMING_EXT 14
+
 #define LID1_STEPPER_A_EXT 11
 #define LID1_STEPPER_B_EXT 9
 #define LID1_STEPPER_C_EXT 10
@@ -51,8 +54,8 @@ using namespace oro;
 #define CAM_HEAD_STEPPER_B 45
 #define CAM_HEAD_STEPPER_C 48
 #define CAM_HEAD_STEPPER_D 47
-#define CAM_HEAD_SERVO 2 // TBD
-#define BOWL_LEFT_LED 17
+#define CAM_HEAD_SERVO_PIN 40 // TBD
+#define BOWL_LEFT_LED 17      ////
 #define BOWL_RIGHT_LED 16
 #define WATER_TANK_LED 15
 
@@ -107,17 +110,50 @@ volatile uint32_t lastNavInterrupt = 0;
 
 portMUX_TYPE navMux = portMUX_INITIALIZER_UNLOCKED;
 
-float step_delay_ms = 5.0; // 0.5
-uint32_t steps_per_rev = 250;
+float step_delay_ms = 1.0; // 0.5
+uint32_t steps_per_rev = 500;
 
 typedef enum {
   STEPPER_DIR_FORWARD = 0,
   STEPPER_DIR_REVERSE = 1,
+  STEPPER_DIR_STOP = 2,
 } stepper_direction_t;
 
 volatile bool LID1_Control = false;
 volatile bool LID2_Control = false;
-volatile bool stepper_direction = false; // false = reverse, true = forward
+volatile bool stepper_direction = false; // false = forward, true = reverse
+
+float Bowl1_Val = 0;
+float Bowl2_Val = 0;
+float Tank_Val = 0;
+
+typedef struct {
+  stepper_direction_t dir;
+  uint8_t seq;
+  uint8_t id;
+} Lid2StepperCommand_t;
+
+typedef struct {
+  stepper_direction_t dir;
+  uint8_t seq;
+  uint8_t id;
+} Lid1StepperCommand_t;
+
+typedef struct {
+  float target_angle;
+} ServoCommand_t;
+
+QueueHandle_t camServoQueue;
+QueueHandle_t lid2StepperQueue;
+QueueHandle_t lid1StepperQueue;
+
+#define SERVO_PWM_CHANNEL 0
+#define SERVO_PWM_FREQ 50
+// Note: On ESP32-S3 (and most ESP32 variants) LEDC duty resolution is typically
+// max 14 bits.
+#define SERVO_PWM_RES 14
+
+bool servo_state = false;
 
 // ── Forward Declarations ────────────────────────────────────────────────────
 void sendAnalogPacket(SensorID id, float value, uint8_t priority = PRIO_LOW);

@@ -4,7 +4,7 @@ HX711 scale1;
 HX711 scale2;
 HX711 scale3;
 
-Adafruit_AHTX0 aht;
+// Adafruit_AHTX0 aht;
 Stepper CAM_HEAD_Stepper(stepsPerRevolution, CAM_HEAD_STEPPER_A,
                          CAM_HEAD_STEPPER_C, CAM_HEAD_STEPPER_B,
                          CAM_HEAD_STEPPER_D); // IN1,IN3,IN2,IN4
@@ -17,8 +17,28 @@ Stepper CAM_HEAD_Stepper(stepsPerRevolution, CAM_HEAD_STEPPER_A,
 // 	};
 
 // TM1637Display display1(I2C_SCL, I2C_SDA);
-HT16K33 display;
+// HT16K33 display;
 TCA9535 TCA(0x20);
+Servo CAM_HEAD_SERVO;
+
+// static void displayWeight4(float weight)
+// {
+//   // Display requirement: 4 chars total:
+//   // - positive: "1234"
+//   // - negative: "-123"
+//   int v = (int)lroundf(weight);
+//   if (v > 9999) v = 9999;
+//   if (v < -999) v = -999;
+
+//   char buf[5];
+//   // right-aligned, space padded; negative will naturally be 4 chars like
+//   "-123" snprintf(buf, sizeof(buf), "%4d", v);
+
+//   display.clear();
+//   display.print(buf);
+//   sendPeripheralPacket(PID_DISPLAY, v*100, PRIO_MED);
+
+// }
 
 // static const uint8_t halfstep_sequence[8][4] = {
 //   {1,0,0,0}, // A
@@ -31,16 +51,20 @@ TCA9535 TCA(0x20);
 //   {1,0,0,1}  // DA
 // };
 
+// static const uint8_t halfstep_sequence[8][4] = {
+//   {1,0,0,0}, // A
+//   {1,0,1,0}, // A+C
+//   {0,0,1,0}, // C
+//   {0,1,1,0}, // C+B
+//   {0,1,0,0}, // B
+//   {0,1,0,1}, // B+D
+//   {0,0,0,1}, // D
+//   {1,0,0,1}  // D+A
+// };
+
 static const uint8_t halfstep_sequence[8][4] = {
-    {1, 0, 0, 0}, // A
-    {1, 0, 1, 0}, // A+C
-    {0, 0, 1, 0}, // C
-    {0, 1, 1, 0}, // C+B
-    {0, 1, 0, 0}, // B
-    {0, 1, 0, 1}, // B+D
-    {0, 0, 0, 1}, // D
-    {1, 0, 0, 1}  // D+A
-};
+    {1, 0, 0, 0}, {1, 0, 1, 0}, {0, 0, 1, 0}, {0, 1, 1, 0},
+    {0, 1, 0, 0}, {0, 1, 0, 1}, {0, 0, 0, 1}, {1, 0, 0, 1}}; // done
 
 //--- Task Handlers-----
 TaskHandle_t IRTaskHandle = NULL;
@@ -49,7 +73,7 @@ TaskHandle_t LoadCell2TaskHandle = NULL;
 TaskHandle_t WaterTankLevelTaskHandle = NULL;
 TaskHandle_t CamLimSwitch1TaskHandle = NULL;
 TaskHandle_t CamLimSwitch2TaskHandle = NULL;
-TaskHandle_t TemperatureTaskHandle = NULL;
+TaskHandle_t AmbientHTTaskHandle = NULL;
 TaskHandle_t NavButtonTaskHandle = NULL;
 TaskHandle_t PwrButtonTaskHandle = NULL;
 QueueHandle_t CAM_HEAD_stepperQueue;
@@ -59,8 +83,9 @@ TaskHandle_t BatteryLevelTaskHandle = NULL;
 TaskHandle_t CamEncoderTaskHandle = NULL;
 TaskHandle_t LID1_StepperTaskHandle = NULL;
 TaskHandle_t LID2_StepperTaskHandle = NULL;
-// TODO: @Arnab Mondal Validate this task
-TaskHandle_t LidHallTaskHandle = NULL;
+TaskHandle_t LID_HALLTaskHandle = NULL;
+TaskHandle_t CAM_HEAD_HOMING_TaskHandle = NULL;
+TaskHandle_t CAM_HEAD_SERVO_TaskHandle = NULL;
 
 // ----- freeRTOS Tasks -----
 
@@ -91,9 +116,11 @@ void LoadCell1Task(void *pvParameters) {
   for (;;) {
     if (scale1.is_ready()) {
       float v = scale1.get_units(3);
-      // v -= Bowl1Weight;
-      // Bowl1Weight = v;
+      Bowl1_Val = v;
       sendAnalogPacket(SID_LOAD_LEFT, v, PRIO_HIGH);
+      if (nav_state == 1) {
+        // displayWeight4(v);
+      }
     }
     vTaskDelay(500 / portTICK_PERIOD_MS);
   }
@@ -104,9 +131,13 @@ void LoadCell2Task(void *pvParameters) {
   for (;;) {
     if (scale2.is_ready()) {
       float v = scale2.get_units(3);
+      Bowl2_Val = v;
       // v -= Bowl2Weight;
       // Bowl2Weight = v;
       sendAnalogPacket(SID_LOAD_RIGHT, v, PRIO_HIGH);
+      if (nav_state == 2) {
+        // displayWeight4(v);
+      }
     }
     vTaskDelay(500 / portTICK_PERIOD_MS);
   }
@@ -117,9 +148,13 @@ void WaterTankLevelTask(void *pvParameters) {
   for (;;) {
     if (scale3.is_ready()) {
       float v = scale3.get_units(3);
+      Tank_Val = v;
       // v -= WaterTankWeight;
       // WaterTankWeight = v;
       sendAnalogPacket(SID_WATER_LEVEL, v, PRIO_HIGH);
+      if (nav_state == 3) {
+        // displayWeight4(v);
+      }
     }
     vTaskDelay(500 / portTICK_PERIOD_MS);
   }
@@ -143,18 +178,18 @@ void CamLimSwitch2Task(void *pvParameters) {
   }
 }
 
-void TemperatureTask(void *pvParameters) {
-  (void)pvParameters;
-  for (;;) {
-    sensors_event_t temp, humidity;
-    aht.getEvent(&temp, &humidity);
+// void AmbientHTTask(void* pvParameters) {
+//     (void)pvParameters;
+//     for (;;) {
+//       sensors_event_t temp, humidity;
+//       aht.getEvent(&temp, &humidity);
 
-    sendAnalogPacket(SID_TEMPERATURE, temp.temperature, PRIO_MED);
-    sendAnalogPacket(SID_HUMIDITY, humidity.relative_humidity, PRIO_MED);
+//       sendAnalogPacket(SID_TEMPERATURE, temp.temperature, PRIO_MED);
+//       sendAnalogPacket(SID_HUMIDITY, humidity.relative_humidity, PRIO_MED);
 
-    vTaskDelay(500 / portTICK_PERIOD_MS);
-  }
-}
+//       vTaskDelay(500 / portTICK_PERIOD_MS);
+//     }
+// }
 
 void IRAM_ATTR navButtonISR() {
   uint32_t now = millis();
@@ -195,26 +230,43 @@ void NavButtonTask(void *pvParameters) {
       digitalWrite(BOWL_LEFT_LED, LOW);
       digitalWrite(BOWL_RIGHT_LED, LOW);
       digitalWrite(WATER_TANK_LED, LOW);
-      display.clear();
+      // display.clear();
+      //  sendAnalogPacket(PID_INDICATOR_LED, 0.0f, PRIO_MED);
+      sendPeripheralPacket(PID_INDICATOR_LED, 0, PRIO_MED);
+      sendAnalogPacket(SID_NAV_BUTTON, 0.0f, PRIO_MED);
+      sendPeripheralPacket(PID_DISPLAY, 0.00 * 100, PRIO_MED);
+
     } else if (nav_state == 1) {
       digitalWrite(BOWL_LEFT_LED, HIGH);
       digitalWrite(BOWL_RIGHT_LED, LOW);
       digitalWrite(WATER_TANK_LED, LOW);
-      display.print("1234");
+      // display.print("1234");  // have to print actual values of load cell
+      //  sendAnalogPacket(PID_INDICATOR_LED, 1.0f, PRIO_MED);
+
+      sendPeripheralPacket(PID_INDICATOR_LED, 1, PRIO_MED);
+      sendAnalogPacket(SID_NAV_BUTTON, 1.0f, PRIO_MED);
+
     } else if (nav_state == 2) {
       digitalWrite(BOWL_LEFT_LED, LOW);
       digitalWrite(BOWL_RIGHT_LED, HIGH);
       digitalWrite(WATER_TANK_LED, LOW);
-      display.print("4321");
+      // display.print("4321");
+      //  sendAnalogPacket(PID_INDICATOR_LED, 2.0f, PRIO_MED);
+      sendPeripheralPacket(PID_INDICATOR_LED, 2, PRIO_MED);
+      sendAnalogPacket(SID_NAV_BUTTON, 2.0f, PRIO_MED);
 
     } else if (nav_state == 3) {
       digitalWrite(BOWL_LEFT_LED, LOW);
       digitalWrite(BOWL_RIGHT_LED, LOW);
       digitalWrite(WATER_TANK_LED, HIGH);
-      display.print("9999");
+      // display.print("9999");
+      // sendPeripheralPacket(PID_INDICATOR_LED, 3, PRIO_MED);
+      sendPeripheralPacket(PID_INDICATOR_LED, 3, PRIO_MED);
+
+      sendAnalogPacket(SID_NAV_BUTTON, 3.0f, PRIO_MED);
     }
 
-    sendDigitalPacket(SID_NAV_BUTTON, pressed, PRIO_MED);
+    // sendAnalogPacket(SID_NAV_BUTTON, pressed, PRIO_MED);
     vTaskDelay(100 / portTICK_PERIOD_MS);
   }
 }
@@ -234,21 +286,34 @@ void CAM_HEAD_StepperTask(
   float target_angle;
 
   CAM_HEAD_Stepper.setSpeed(60);
+  bool running = false;
 
   while (true) {
     // Wait for new target angle
-    if (xQueueReceive(CAM_HEAD_stepperQueue, &target_angle, portMAX_DELAY) ==
-        pdTRUE) {
+    if (xQueueReceive(CAM_HEAD_stepperQueue, &target_angle,
+                      pdMS_TO_TICKS(100)) == pdTRUE) {
       float delta_angle = target_angle - current_angle;
 
       int steps_to_move = (int)(delta_angle * STEPS_PER_DEGREE);
 
       Serial.print("Stepper moving to angle: ");
       Serial.println(target_angle);
+
+      // MW expects PID_CAMERA_STEPPER to behave like a DIGITAL motor state:
+      // 1 = running, 0 = stopped. (Angle is already available via
+      // encoder/sensors.)
+      if (!running && steps_to_move != 0) {
+        running = true;
+        sendPeripheralPacket(PID_CAMERA_STEPPER, 1, PRIO_HIGH);
+      }
+
       CAM_HEAD_Stepper.step(steps_to_move);
       current_angle = target_angle;
-      sendPeripheralPacket(PID_CAMERA_STEPPER,
-                           (int32_t)(current_angle * 100.0f), PRIO_HIGH);
+
+      if (running) {
+        running = false;
+        sendPeripheralPacket(PID_CAMERA_STEPPER, 0, PRIO_HIGH);
+      }
     }
     vTaskDelay(10 / portTICK_PERIOD_MS);
   }
@@ -354,8 +419,12 @@ void stepper_step(const uint8_t index, stepper_direction_t dir) {
     delay(step_delay_ms);
     if (dir == STEPPER_DIR_FORWARD) {
       idx = (idx + 1) & 0x7;
-    } else {
+    } else if (dir == STEPPER_DIR_REVERSE) {
       idx = (idx + 7) & 0x7;
+    } else if (dir == STEPPER_DIR_STOP) {
+      const uint8_t off_state[4] = {0, 0, 0, 0};
+      stepper_apply_state(index, off_state);
+      return;
     }
   }
   // Stop motor and deactivate coils.
@@ -366,21 +435,38 @@ void stepper_step(const uint8_t index, stepper_direction_t dir) {
 void LID1_StepperTask(void *pvParameters) {
   (void)pvParameters;
 
+  Lid1StepperCommand_t cmd;
+  bool running = false;
+
   for (;;) {
-    // Wait until some other task tells us to run the motor
-    if (LID1_Control == true) {
-
-      sendPeripheralPacket(PID_LID1_STEPPER, 1, PRIO_HIGH); // Running
-      if (stepper_direction == true) {
-        // TRUE  -> Forward
-        stepper_step(1, STEPPER_DIR_FORWARD);
-      } else {
-        // FALSE -> Reverse
-        stepper_step(1, STEPPER_DIR_REVERSE);
-      }
-
+    // Backward compatibility: if someone still toggles the old flag,
+    // convert it into a queued command (so it doesn't rely on pulse timing).
+    if (LID1_Control) {
       LID1_Control = false; // consume request
-      sendPeripheralPacket(PID_LID1_STEPPER, 0, PRIO_HIGH); // Idle
+      cmd.dir = stepper_direction ? STEPPER_DIR_REVERSE : STEPPER_DIR_FORWARD;
+      cmd.id = 0xFF; // No ACK for legacy triggers
+      (void)xQueueSend(lid1StepperQueue, &cmd, portMAX_DELAY);
+    }
+
+    // Primary control path: wait for queued commands (lets CW then CCW work
+    // reliably)
+    if (xQueueReceive(lid1StepperQueue, &cmd, pdMS_TO_TICKS(10)) == pdTRUE) {
+      if (!running) {
+        running = true;
+        // 1 = running
+        sendPeripheralPacket(PID_LID1_STEPPER, 1, PRIO_LOW);
+      }
+      stepper_step(1, cmd.dir);
+      if (running) {
+        running = false;
+        // 0 = stopped
+        sendPeripheralPacket(PID_LID1_STEPPER, 0, PRIO_LOW);
+
+        // Late ACK: only if we have a valid command context
+        if (cmd.id != 0xFF) {
+          sendAckPacket(cmd.id, cmd.seq, ACK_SUCCESS);
+        }
+      }
     }
 
     // Small delay so task does not hog CPU
@@ -391,53 +477,180 @@ void LID1_StepperTask(void *pvParameters) {
 void LID2_StepperTask(void *pvParameters) {
   (void)pvParameters;
 
+  Lid2StepperCommand_t cmd;
+  bool running = false;
+
   for (;;) {
-    // Wait until some other task tells us to run the motor
-    if (LID2_Control == true) {
-
-      sendPeripheralPacket(PID_LID2_STEPPER, 1, PRIO_HIGH); // Running
-      if (stepper_direction == true) {
-        // TRUE  -> Forward
-        stepper_step(2, STEPPER_DIR_FORWARD);
-      } else {
-        // FALSE -> Reverse
-        stepper_step(2, STEPPER_DIR_REVERSE);
-      }
-
+    // Backward compatibility: if someone still toggles the old flag,
+    // convert it into a queued command (so it doesn't rely on pulse timing).
+    if (LID2_Control) {
       LID2_Control = false; // consume request
-      sendPeripheralPacket(PID_LID2_STEPPER, 0, PRIO_HIGH); // Idle
+      cmd.dir = stepper_direction ? STEPPER_DIR_REVERSE : STEPPER_DIR_FORWARD;
+      cmd.id = 0xFF; // No ACK for legacy triggers
+      (void)xQueueSend(lid2StepperQueue, &cmd, portMAX_DELAY);
     }
 
-    // Small delay so task does not hog CPU
+    // Primary control path: wait for queued commands (lets CW then CCW work
+    // reliably)
+    if (xQueueReceive(lid2StepperQueue, &cmd, pdMS_TO_TICKS(10)) == pdTRUE) {
+      if (!running) {
+        running = true;
+        // 1 = running
+        sendPeripheralPacket(PID_LID2_STEPPER, 1, PRIO_LOW);
+      }
+      stepper_step(2, cmd.dir);
+      if (running) {
+        running = false;
+        // 0 = stopped
+        sendPeripheralPacket(PID_LID2_STEPPER, 0, PRIO_LOW);
+
+        // Late ACK: only if we have a valid command context
+        if (cmd.id != 0xFF) {
+          sendAckPacket(cmd.id, cmd.seq, ACK_SUCCESS);
+        }
+      }
+    }
+
     vTaskDelay(pdMS_TO_TICKS(10));
   }
 }
 
-// TODO: @Arnab Mondal Validate this task
-void LidHallTask(void *pvParameters) {
+void LID_HALLTask(void *pvParameters) {
   (void)pvParameters;
+
   for (;;) {
-    // Read Lid 1 Hall sensors from TCA expander
-    // 0: Closed (Sensor 1 active), 1: Opened (Sensor 2 active)
-    uint8_t lid1_state = 0;
-    if (TCA.read1(LID1_HALL1_EXT) == LOW) {
-      lid1_state = 0; // Closed
-    } else if (TCA.read1(LID1_HALL2_EXT) == LOW) {
-      lid1_state = 1; // Open
-    }
-    sendDigitalPacket(SID_LID1_HALL, lid1_state, PRIO_MED);
+    int hall1 = TCA.read1(LID1_HALL1_EXT);
+    int hall2 = TCA.read1(LID1_HALL2_EXT);
+    int hall3 = TCA.read1(LID2_HALL1_EXT);
+    int hall4 = TCA.read1(LID2_HALL2_EXT);
 
-    // Read Lid 2 Hall sensors from TCA expander
-    // 0: Closed (Sensor 3 active), 1: Opened (Sensor 4 active)
-    uint8_t lid2_state = 0;
-    if (TCA.read1(LID2_HALL1_EXT) == LOW) {
-      lid2_state = 0; // Closed
-    } else if (TCA.read1(LID2_HALL2_EXT) == LOW) {
-      lid2_state = 1; // Open
-    }
-    sendDigitalPacket(SID_LID2_HALL, lid2_state, PRIO_MED);
+    if (hall1 == HIGH) {
+      sendAnalogPacket(SID_LID1_HALL, 0.0f, PRIO_MED);
+      // To stop the Lid1 stepper, send a command to lid1StepperQueue with a
+      // 'STOP' directive, if the handler supports a STOP state or value. Let's
+      // check the LID1_StepperTask handler: If handler only understands dir ==
+      // STEPPER_DIR_FORWARD or STEPPER_DIR_REVERSE, you must extend handler to
+      // also support a STOP value, e.g., (stepper_direction_t)2.
 
-    vTaskDelay(pdMS_TO_TICKS(100)); // Sample at 10Hz
+      // Here we create and send a STOP command, corresponding to a new STOP
+      // value.
+      Lid1StepperCommand_t stop_cmd;
+      stop_cmd.dir = (stepper_direction_t)2;
+      stop_cmd.id = 0xFF; // No ACK for sensor triggers
+      xQueueSend(lid1StepperQueue, &stop_cmd, 0);
+    } else if (hall2 == HIGH) {
+      sendAnalogPacket(SID_LID1_HALL, 1.0f, PRIO_MED);
+      Lid1StepperCommand_t stop_cmd;
+      stop_cmd.dir = (stepper_direction_t)2;
+      stop_cmd.id = 0xFF; // No ACK for sensor triggers
+      xQueueSend(lid1StepperQueue, &stop_cmd, 0);
+    } else {
+      sendAnalogPacket(SID_LID1_HALL, 3.0f, PRIO_MED);
+    }
+
+    if (hall3 == HIGH) {
+      sendAnalogPacket(SID_LID2_HALL, 0.0f, PRIO_MED);
+      Lid2StepperCommand_t stop_cmd;
+      stop_cmd.dir = (stepper_direction_t)2;
+      stop_cmd.id = 0xFF; // No ACK for sensor triggers
+      xQueueSend(lid2StepperQueue, &stop_cmd, 0);
+    } else if (hall4 == HIGH) {
+      sendAnalogPacket(SID_LID2_HALL, 1.0f, PRIO_MED);
+      Lid2StepperCommand_t stop_cmd;
+      stop_cmd.dir = (stepper_direction_t)2;
+      stop_cmd.id = 0xFF; // No ACK for sensor triggers
+      xQueueSend(lid2StepperQueue, &stop_cmd, 0);
+    } else {
+      sendAnalogPacket(SID_LID2_HALL, 3.0f, PRIO_MED);
+    }
+
+    // sendDigitalPacket(SID_LID1_HALL, hall1 && hall2, PRIO_MED);
+  }
+
+  vTaskDelay(pdMS_TO_TICKS(1000));
+}
+
+void CAM_HEAD_HOMING_Task(void *pvParameters) {
+  (void)pvParameters;
+
+  for (;;) {
+    int homingState = TCA.read1(CAM_HEAD_HOMING_EXT);
+
+    sendDigitalPacket(SID_HOME_SENSOR, homingState, PRIO_HIGH);
+
+    vTaskDelay(pdMS_TO_TICKS(100));
+  }
+}
+
+void MoveCamServo(float angle) {
+  ServoCommand_t cmd;
+  cmd.target_angle = angle;
+
+  xQueueSend(camServoQueue, &cmd, portMAX_DELAY); // portMAX_DELAY
+}
+
+void ServoWriteAngle(float angle) {
+  // Clamp angle
+  if (angle < 0)
+    angle = 0;
+  if (angle > 180)
+    angle = 180;
+
+  // Convert angle → pulse width (µs)
+  // SG90 typical safe control range is closer to ~1000–2000 µs.
+  // Wide ranges (e.g., 500–2500 µs) can drive it into mechanical end-stops.
+  const float SERVO_MIN_US = 1000.0f;
+  const float SERVO_MAX_US = 2000.0f;
+  float pulseWidth =
+      SERVO_MIN_US + (angle / 180.0f) * (SERVO_MAX_US - SERVO_MIN_US);
+
+  // Convert µs → duty (LEDC resolution bits)
+  const uint32_t maxDuty = (1UL << SERVO_PWM_RES) - 1UL;
+  uint32_t duty = (uint32_t)((pulseWidth / 20000.0f) * (float)maxDuty);
+
+  // Newer Arduino-ESP32 LEDC API: ledcWrite() is pin-based.
+  ledcWrite(CAM_HEAD_SERVO_PIN, duty);
+}
+
+void CAM_HEAD_SERVO_Task(void *pvParameters) {
+  (void)pvParameters;
+
+  ServoCommand_t cmd;
+  float current_angle_servo = 0.0f;
+
+  // Move servo to initial position
+  ServoWriteAngle(current_angle_servo);
+  // sendPeripheralPacket(PID_CAMERA_SERVO, servo_state, PRIO_MED);
+
+  while (1) {
+    // Wait for command (timeout lets task stay alive even if no command)
+    if (xQueueReceive(camServoQueue, &cmd, pdMS_TO_TICKS(100)) == pdTRUE) {
+      float target = cmd.target_angle;
+
+      // Clamp for safety
+      if (target < 0)
+        target = 0;
+      if (target > MAX_ANGLE)
+        target = MAX_ANGLE;
+
+      // Smooth movement
+      while (fabs(current_angle_servo - target) > 0.5f) {
+        if (current_angle_servo < target)
+          current_angle_servo += 1.0f;
+        else
+          current_angle_servo -= 1.0f;
+
+        ServoWriteAngle(current_angle_servo); // ⭐ IMPORTANT CHANGE
+        sendPeripheralPacket(PID_CAMERA_SERVO, true, PRIO_MED);
+        vTaskDelay(pdMS_TO_TICKS(20)); // movement speed
+      }
+
+      current_angle_servo = target;
+      ServoWriteAngle(current_angle_servo); // ⭐ IMPORTANT CHANGE
+    }
+    // servo_state = false;
+    sendPeripheralPacket(PID_CAMERA_SERVO, false, PRIO_MED);
+    vTaskDelay(pdMS_TO_TICKS(100)); // Update at least every 100ms
   }
 }
 
@@ -449,13 +662,13 @@ void setup() {
   }
   Wire.begin(I2C_SDA, I2C_SCL);
 
-  aht.begin();
+  // aht.begin();
 
-  if (display.begin() == false) {
-    // Serial.println("Device did not acknowledge! Freezing.");
-    while (1)
-      ;
-  }
+  // if (display.begin() == false)
+  // {
+  //   //Serial.println("Device did not acknowledge! Freezing.");
+  //   while (1);
+  // }
   if (!TCA.begin()) {
     Serial.println("GPIO Extender not found!");
     while (1)
@@ -506,6 +719,7 @@ void setup() {
   TCA.pinMode1(LID1_HALL2_EXT, INPUT);
   TCA.pinMode1(LID2_HALL1_EXT, INPUT);
   TCA.pinMode1(LID2_HALL2_EXT, INPUT);
+  TCA.pinMode1(CAM_HEAD_HOMING_EXT, INPUT);
 
   TCA.pinMode1(LID1_STEPPER_A_EXT, OUTPUT);
   TCA.pinMode1(LID1_STEPPER_B_EXT, OUTPUT);
@@ -516,7 +730,16 @@ void setup() {
   TCA.pinMode1(LID2_STEPPER_C_EXT, OUTPUT);
   TCA.pinMode1(LID2_STEPPER_D_EXT, OUTPUT);
 
+  // Configure PWM for servo (50 Hz) using LEDC (Arduino-ESP32 v3 style API)
+  // ledcAttach() sets up the channel internally and binds it to the pin.
+  if (!ledcAttach(CAM_HEAD_SERVO_PIN, SERVO_PWM_FREQ, SERVO_PWM_RES)) {
+    Serial.println("ERROR: LEDC attach failed for servo pin");
+  }
+
   CAM_HEAD_stepperQueue = xQueueCreate(5, sizeof(float));
+  camServoQueue = xQueueCreate(5, sizeof(ServoCommand_t));
+  lid2StepperQueue = xQueueCreate(5, sizeof(Lid2StepperCommand_t));
+  lid1StepperQueue = xQueueCreate(5, sizeof(Lid1StepperCommand_t));
 
   // Create task on Core 1 (recommended for Arduino loop tasks)
   xTaskCreatePinnedToCore(IR_Task, "IR Task", 2048, NULL, 4, &IRTaskHandle, 1);
@@ -535,16 +758,20 @@ void setup() {
                           &LoadCell2TaskHandle, 0);
   xTaskCreatePinnedToCore(WaterTankLevelTask, "WaterTankLevelTask", 2048, NULL,
                           4, &WaterTankLevelTaskHandle, 0);
-  xTaskCreatePinnedToCore(CamLimSwitch1Task, "CamLimSwitch1Task", 1024, NULL, 4,
+  xTaskCreatePinnedToCore(CamLimSwitch1Task, "CamLimSwitch1Task", 2048, NULL, 4,
                           &CamLimSwitch1TaskHandle, 0);
-  xTaskCreatePinnedToCore(CamLimSwitch2Task, "CamLimSwitch2Task", 1024, NULL, 4,
+  xTaskCreatePinnedToCore(CamLimSwitch2Task, "CamLimSwitch2Task", 2048, NULL, 4,
                           &CamLimSwitch2TaskHandle, 0);
+  xTaskCreatePinnedToCore(CAM_HEAD_HOMING_Task, "CAM_HEAD_HOMING_Task", 2048,
+                          NULL, 5, &CAM_HEAD_HOMING_TaskHandle, 0);
   xTaskCreatePinnedToCore(CamEncoderTask, "CamEncoderTask", 4096, NULL, 1,
                           &CamEncoderTaskHandle, 0);
+  xTaskCreatePinnedToCore(LID_HALLTask, "LID_HALLTask", 2048, NULL, 1,
+                          &LID_HALLTaskHandle, 0);
 
   // Humidity and Temperature can be read with single task
-  xTaskCreatePinnedToCore(TemperatureTask, "TemperatureTask", 4096, NULL, 2,
-                          &TemperatureTaskHandle, 0);
+  // xTaskCreatePinnedToCore(AmbientHTTask, "AmbientHTTask", 4096, NULL, 2,
+  // &AmbientHTTaskHandle, 0);
 
   xTaskCreatePinnedToCore(CAM_HEAD_StepperTask, "CAM_HEAD_StepperTask", 2048,
                           NULL, 4, &CAM_HEAD_StepperTaskHandle, 1);
@@ -554,9 +781,13 @@ void setup() {
                           &LID1_StepperTaskHandle, 1);
   xTaskCreatePinnedToCore(LID2_StepperTask, "LID2_StepperTask", 2048, NULL, 4,
                           &LID2_StepperTaskHandle, 1);
-  // TODO: @Arnab Mondal Validate this task
-  xTaskCreatePinnedToCore(LidHallTask, "LidHallTask", 2048, NULL, 3,
-                          &LidHallTaskHandle, 1);
+  xTaskCreatePinnedToCore(CAM_HEAD_SERVO_Task, "CAM_HEAD_SERVO_Task", 2048,
+                          NULL, 4, &CAM_HEAD_SERVO_TaskHandle, 1);
+
+  // ServoWriteAngle(0); // Move servo to initial position
+  // vTaskDelay(2000 / portTICK_PERIOD_MS);
+  // ServoWriteAngle(90); // Move servo to test position
+  // vTaskDelay(2000 / portTICK_PERIOD_MS);
 }
 
 // ── Main Loop ───────────────────────────────────────────────────────────────
@@ -569,24 +800,53 @@ void loop() {
     sendHeartbeat();
   }
 
-  // // // Uncomment to test pump
+  // // // // Uncomment to test pump
   // pump_state = true;
-  // vTaskDelay(10000 / portTICK_PERIOD_MS);
+  // vTaskDelay(3000 / portTICK_PERIOD_MS);
   // pump_state = false;
-  // vTaskDelay(10000 / portTICK_PERIOD_MS);
+  // // vTaskDelay(10000 / portTICK_PERIOD_MS);
 
-  // LID1_Control = true;
-  LID2_Control = true;
-  stepper_direction = true; // forward
-  vTaskDelay(5000 / portTICK_PERIOD_MS);
-  stepper_direction = false; // reverse
-  vTaskDelay(5000 / portTICK_PERIOD_MS);
+  // //LID1_Control = true;
+  // // stepper_direction = true; // forward
+  // //--- RUN FORWARD ---
 
-  // LID1_Control = false;
-  LID2_Control = false;
-  vTaskDelay(5000 / portTICK_PERIOD_MS);
+  // // forward
 
+  // Lid1StepperCommand_t cmd2;
+
+  // cmd2.dir = STEPPER_DIR_FORWARD;
+  // xQueueSend(lid1StepperQueue, &cmd2, portMAX_DELAY);
+  // vTaskDelay(pdMS_TO_TICKS(3000));
+
+  // // reverse
+  // cmd2.dir = STEPPER_DIR_REVERSE;
+  // xQueueSend(lid1StepperQueue, &cmd2, portMAX_DELAY);
+  // vTaskDelay(pdMS_TO_TICKS(3000));
+
+  // Lid2StepperCommand_t cmd1;
+
+  // cmd1.dir = STEPPER_DIR_FORWARD;
+  // xQueueSend(lid2StepperQueue, &cmd1, portMAX_DELAY);
+  // vTaskDelay(pdMS_TO_TICKS(3000));
+
+  // // reverse
+  // cmd1.dir = STEPPER_DIR_REVERSE;
+  // xQueueSend(lid2StepperQueue, &cmd1, portMAX_DELAY);
+  // vTaskDelay(pdMS_TO_TICKS(3000));
+
+  // MoveCamServo(180);
+  // vTaskDelay(2000 / portTICK_PERIOD_MS);
+
+  // MoveCamServo(0);
+  // vTaskDelay(2000 / portTICK_PERIOD_MS);
+
+  // camera_angle = 45.0f;
+  // xQueueSend(CAM_HEAD_stepperQueue, &camera_angle, portMAX_DELAY);
+  // vTaskDelay(3000 / portTICK_PERIOD_MS);
+
+  // Process incoming UART command packets (pump/lids/servo/camera stepper).
   processIncomingCommands();
+  vTaskDelay(pdMS_TO_TICKS(1));
 }
 
 // ── Packet Senders
@@ -699,7 +959,10 @@ void processIncomingCommands() {
         uint8_t id = GET_ID(cand->id_seq);
         uint8_t seq = GET_SEQ(cand->id_seq);
 
-        if (id == PID_CAMERA_STEPPER) {
+        bool deferred_ack = false;
+
+        switch (id) {
+        case PID_CAMERA_STEPPER:
           // Set target angle within range [+90, -90]
           camera_angle = (float)val / 100.0f;
           if (camera_angle > 90.0f)
@@ -709,18 +972,48 @@ void processIncomingCommands() {
 
           // Encoder ticks = exactly the angle (1 tick per degree)
           encoder_ticks = (int32_t)camera_angle;
+          xQueueSend(CAM_HEAD_stepperQueue, &camera_angle, portMAX_DELAY);
+          break;
 
-          // Publish current state feedback
-          // sendPeripheralPacket(PID_CAMERA_STEPPER, (int32_t)(camera_angle *
-          // 100.0f));
-          xQueueSend(CAM_HEAD_stepperQueue, &camera_angle, 0);
+        case PID_PUMP:
+          pump_state = ((float)val != 0);
+          break;
 
-        } else if (id == PID_PUMP) {
-          pump_state = (val != 0);
+        case PID_CAMERA_SERVO:
+          servo_state = ((float)val != 0);
+          if (servo_state) {
+            MoveCamServo(90.0f);
+          } else {
+            MoveCamServo(0.0f);
+          }
+          break;
+
+        case PID_LID1_STEPPER: {
+          Lid1StepperCommand_t cmd;
+          cmd.dir = (val != 0) ? STEPPER_DIR_REVERSE : STEPPER_DIR_FORWARD;
+          cmd.seq = seq;
+          cmd.id = id;
+          xQueueSend(lid1StepperQueue, &cmd, portMAX_DELAY);
+          deferred_ack = true;
+        } break;
+
+        case PID_LID2_STEPPER: {
+          Lid2StepperCommand_t cmd;
+          cmd.dir = (val != 0) ? STEPPER_DIR_REVERSE : STEPPER_DIR_FORWARD;
+          cmd.seq = seq;
+          cmd.id = id;
+          xQueueSend(lid2StepperQueue, &cmd, portMAX_DELAY);
+          deferred_ack = true;
+        } break;
+
+        default:
+          // Handle unknown PID if necessary
+          break;
         }
 
-        // Always ACK the command back with same SEQ and ID
-        sendAckPacket(id, seq, val);
+        if (!deferred_ack) {
+          sendAckPacket(id, seq, ACK_SUCCESS);
+        }
       }
 
       // Consume packet

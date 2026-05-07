@@ -470,7 +470,8 @@ void processIncomingCommands() {
           lid1_hall_state = 3; // Transition state
           sendAnalogPacket(SID_LID1_HALL, 3.0f, PRIO_HIGH);
           sendPeripheralPacket(PID_LID1_STEPPER, 1); // Motor running
-          registerAsyncAction(id, seq, lid1_open ? 1500 : 800, val);   // Dynamic settle time
+          registerAsyncAction(id, seq, lid1_open ? 1500 : 800,
+                              val); // Dynamic settle time
           break;
 
         case PID_LID2_STEPPER:
@@ -479,7 +480,8 @@ void processIncomingCommands() {
           lid2_hall_state = 3; // Transition state
           sendAnalogPacket(SID_LID2_HALL, 3.0f, PRIO_HIGH);
           sendPeripheralPacket(PID_LID2_STEPPER, 1); // Motor running
-          registerAsyncAction(id, seq, lid2_open ? 1600 : 900, val);   // Dynamic settle time
+          registerAsyncAction(id, seq, lid2_open ? 1600 : 900,
+                              val); // Dynamic settle time
           break;
 
         case PID_DISPLAY:
