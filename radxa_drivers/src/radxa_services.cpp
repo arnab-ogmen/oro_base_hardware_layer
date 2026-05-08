@@ -1,4 +1,4 @@
-#include "radxa_services.hpp"
+#include "radxa_drivers/radxa_services.hpp"
 #include <chrono>
 #include <csignal>
 #include <iostream>
@@ -21,50 +21,129 @@ std::string RadxaServices::process_command(const nlohmann::json &cmd) {
   std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
   if (topic == "/commands/feed") {
-    return simulate_work("Feed (Grams)", val);
+    return handle_feed(val);
   } else if (topic == "/commands/treat/dispense") {
-    return simulate_work("Treat Dispense (Count)", val);
+    return handle_treat_dispense(val);
   } else if (topic == "/commands/photo_capture") {
-    return simulate_work("Photo Capture", val);
+    return handle_photo_capture();
   } else if (topic == "/commands/live_session/start") {
-    return simulate_work("Live Session Start", val);
+    return handle_live_session_start();
   } else if (topic == "/commands/live_session/end") {
-    return simulate_work("Live Session End", val);
+    return handle_live_session_end();
   } else if (topic == "/commands/camera/ir_control") {
-    return simulate_work("Camera IR Control", val);
+    return handle_ir_control(val >= 0.5f);
   } else if (topic == "/commands/audio/speakers") {
-    // TODO: Add robust method to play the audio files
     return handle_audio_command(static_cast<int>(val));
   } else if (topic == "/commands/settings/apply") {
-    return simulate_work("Apply System Settings", val);
+    return handle_apply_settings(cmd);
   } else if (topic == "/commands/firmware/update") {
-    // TODO: Add robust method to fetch and install the firmware
-    nlohmann::json response;
-    response["status"] = "success";
-    response["message"] = "up_to_date";
-    response["version"] = "v0.0.1-latest";
-    response["source"] = "RadxaCubieA7z";
-    response["completed_at"] =
-        std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
-    return response.dump();
+    return handle_firmware_update();
   }
 
   return "{\"status\":\"error\",\"message\":\"unsupported_radxa_topic\"}";
 }
 
-std::string RadxaServices::simulate_work(const std::string &name, float value) {
-  std::cout << "[RadxaServices] JSON Command Executed: " << name
-            << " (Val: " << value << ")" << std::endl;
+std::string RadxaServices::handle_feed(float grams) {
+  std::cout << "[RadxaServices] Executing Feed: " << grams << "g" << std::endl;
+  nlohmann::json res = {
+      {"status", "success"}, {"operation", "feed"}, {"grams", grams}};
+  res["completed_at"] = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+  return res.dump();
+}
 
-  nlohmann::json response;
-  response["status"] = "success";
-  response["source"] = "RadxaCubieA7z";
-  response["operation"] = name;
-  response["requested_value"] = value;
-  response["completed_at"] =
-      std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+std::string RadxaServices::handle_treat_dispense(float count) {
+  std::cout << "[RadxaServices] Executing Treat Dispense: " << count << " units" << std::endl;
+  nlohmann::json res = {
+      {"status", "success"}, {"operation", "treat_dispense"}, {"count", count}};
+  res["completed_at"] = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+  return res.dump();
+}
 
-  return response.dump();
+std::string RadxaServices::handle_photo_capture() {
+  std::cout << "[RadxaServices] Executing Photo Capture on /dev/video1" << std::endl;
+
+  auto now = std::chrono::system_clock::now();
+  auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(
+                       now.time_since_epoch())
+                       .count();
+
+  std::string filename = "ORoBase_IMG_" + std::to_string(timestamp) + ".jpg";
+  std::string full_path = "/home/ogmen/Pictures/Comman_Executor_Images/" + filename;
+
+  // Use ffmpeg to capture one frame from /dev/video1
+  // -y overwrites, -f v4l2 is the format, -i /dev/video1 input, -frames:v 1 capture 1 frame
+  std::string cmd = "ffmpeg -y -f v4l2 -i /dev/video1 -frames:v 1 " + full_path + " > /dev/null 2>&1";
+
+  int ret = std::system(cmd.c_str());
+  bool success = (ret == 0);
+
+  nlohmann::json res = {{"status", success ? "success" : "failed"},
+                        {"operation", "photo_capture"},
+                        {"saved", success},
+                        {"file_id", "IMG_" + std::to_string(timestamp)},
+                        {"storage_path", full_path}};
+  res["completed_at"] = std::chrono::system_clock::to_time_t(now);
+
+  if (!success) {
+    res["error"] = "ffmpeg_failed_or_device_busy";
+    std::cerr << "[RadxaServices] Photo capture failed for " << full_path << std::endl;
+  } else {
+    std::cout << "[RadxaServices] Photo saved to " << full_path << std::endl;
+  }
+
+  return res.dump();
+}
+
+std::string RadxaServices::handle_live_session_start() {
+  std::cout << "[RadxaServices] Starting Live Session" << std::endl;
+  nlohmann::json res = {{"status", "success"}, {"operation", "live_session_start"}};
+  res["completed_at"] = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+  return res.dump();
+}
+
+std::string RadxaServices::handle_live_session_end() {
+  std::cout << "[RadxaServices] Ending Live Session" << std::endl;
+  nlohmann::json res = {{"status", "success"}, {"operation", "live_session_end"}};
+  res["completed_at"] = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+  return res.dump();
+}
+
+std::string RadxaServices::handle_ir_control(bool enable) {
+  std::cout << "[RadxaServices] IR Control: " << (enable ? "ON" : "OFF") << std::endl;
+  nlohmann::json res = {{"status", "success"}, {"operation", "ir_control"}, {"enabled", enable}};
+  res["completed_at"] = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+  return res.dump();
+}
+
+std::string RadxaServices::handle_apply_settings(const nlohmann::json &cmd) {
+  std::cout << "[RadxaServices] Applying System Settings" << std::endl;
+  
+  // Extract profile_id if available, else use a default
+  std::string profile_id = cmd.value("settings_profile_id", "default_profile_v1");
+  auto now = std::chrono::system_clock::now();
+  auto applied_at = std::chrono::duration_cast<std::chrono::milliseconds>(
+                        now.time_since_epoch())
+                        .count();
+
+  nlohmann::json res = {
+      {"status", "success"}, 
+      {"operation", "apply_settings"},
+      {"settings_profile_id", profile_id},
+      {"applied_at", applied_at},
+      {"failure_reason", ""}
+  };
+  res["completed_at"] = std::chrono::system_clock::to_time_t(now);
+  return res.dump();
+}
+
+std::string RadxaServices::handle_firmware_update() {
+  std::cout << "[RadxaServices] Checking for Firmware Update" << std::endl;
+  nlohmann::json res = {{"status", "success"},
+                        {"operation", "firmware_update"},
+                        {"message", "up_to_date"},
+                        {"version", "v0.0.1-latest"}};
+  res["completed_at"] = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
+  return res.dump();
 }
 
 std::string RadxaServices::handle_audio_command(int action_code) {

@@ -14,7 +14,7 @@ pkg_check_modules(ZMQ REQUIRED libzmq)
 # But standard is to find it.
 
 include_directories(
-    ${CMAKE_CURRENT_SOURCE_DIR}/../include
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${CMAKE_CURRENT_SOURCE_DIR}/../../oro_base_input_layer/include
     ${ZMQ_INCLUDE_DIRS}
 )

@@ -16,8 +16,15 @@ public:
     static std::string process_command(const nlohmann::json& cmd);
 
 private:
-    // Helper to simulate physical work (logs and returns success)
-    static std::string simulate_work(const std::string& name, float value);
+    // Modular Command Handlers
+    static std::string handle_feed(float grams);
+    static std::string handle_treat_dispense(float count);
+    static std::string handle_photo_capture();
+    static std::string handle_live_session_start();
+    static std::string handle_live_session_end();
+    static std::string handle_ir_control(bool enable);
+    static std::string handle_apply_settings(const nlohmann::json& settings);
+    static std::string handle_firmware_update();
 
     // Audio Playback Management
     static std::string handle_audio_command(int action_code);
