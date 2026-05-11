@@ -1,0 +1,10 @@
+namespace oro.media;
+
+table AudioFrame {
+  timestamp_ns: ulong;
+  sample_rate: uint;
+  channels: uint;
+  samples: [ubyte];
+}
+
+root_type AudioFrame;

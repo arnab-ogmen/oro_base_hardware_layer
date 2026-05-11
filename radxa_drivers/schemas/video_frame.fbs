@@ -1,0 +1,12 @@
+namespace oro.media;
+
+table VideoFrame {
+  timestamp_ns: ulong;
+  width: uint;
+  height: uint;
+  format: string;
+  frame_id: ulong;
+  data: [ubyte];
+}
+
+root_type VideoFrame;
