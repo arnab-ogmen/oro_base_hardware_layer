@@ -29,6 +29,7 @@ bool VideoPipeline::init() {
         "image/jpeg,width=" + std::to_string(config_.width) + ",height=" + std::to_string(config_.height) +
         ",framerate=" + std::to_string(config_.framerate_num) + "/" + std::to_string(config_.framerate_den) + " ! "
         "jpegparse ! "
+        // "mppjpegdec ! "
         "jpegdec ! "
         "videoconvert ! "
         "video/x-raw,format=NV12 ! "
