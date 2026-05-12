@@ -127,4 +127,4 @@ install(TARGETS radxa_drivers video_ingestor audio_ingestor stream_player
     RUNTIME DESTINATION bin
 )
 
-install(DIRECTORY ../include/ DESTINATION include/oro/hardware)
+install(DIRECTORY include/ DESTINATION include/oro/hardware)
