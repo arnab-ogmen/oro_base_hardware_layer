@@ -19,6 +19,7 @@ public:
     bool init();
     void start();
     void stop();
+    void set_source_fd(int fd);
 
 private:
     static GstFlowReturn on_new_sample(GstElement* sink, gpointer data);
@@ -28,6 +29,7 @@ private:
     GstElement* pipeline_;
     GstElement* appsink_;
     uint64_t frame_count_;
+    int source_fd_;
 };
 
 } // namespace video

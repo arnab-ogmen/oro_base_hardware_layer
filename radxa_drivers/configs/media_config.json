@@ -1,15 +1,15 @@
 {
   "video": {
-    "device": "/dev/video2",
-    "width": 3840,
-    "height": 2160,
+    "device": "/dev/video0",
+    "width": 1280,
+    "height": 720,
     "framerate_num": 30,
     "framerate_den": 1,
     "zmq_endpoint": "ipc:///tmp/video.sock",
     "hwm": 3
   },
   "audio": {
-    "device": "hw:2,0",
+    "device": "plughw:2,0",
     "rate": 16000,
     "channels": 1,
     "format": "S16LE",

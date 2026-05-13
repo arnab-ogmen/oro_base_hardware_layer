@@ -1,3 +1,4 @@
+
 #include "media/video_pipeline.h"
 #include "common/timing/monotonic_clock.h"
 #include "video_frame_generated.h" // FlatBuffers generated header
@@ -9,8 +10,12 @@ namespace media {
 namespace video {
 
 VideoPipeline::VideoPipeline(std::shared_ptr<zmq_ipc::ZmqPublisher> publisher, const config::VideoConfig& config)
-    : publisher_(publisher), config_(config), pipeline_(nullptr), appsink_(nullptr), frame_count_(0) {
+    : publisher_(publisher), config_(config), pipeline_(nullptr), appsink_(nullptr), frame_count_(0), source_fd_(-1) {
     gst_init(nullptr, nullptr);
+}
+
+void VideoPipeline::set_source_fd(int fd) {
+    source_fd_ = fd;
 }
 
 VideoPipeline::~VideoPipeline() {
@@ -22,14 +27,14 @@ VideoPipeline::~VideoPipeline() {
 
 bool VideoPipeline::init() {
     GError* error = nullptr;
-    // We use a robust GStreamer pipeline string based on architecture specs
-    // Note: Swapped mppjpegdec -> jpegdec for local x86 testing. Revert on RK3588!
-    std::string pipeline_str = 
-        "v4l2src device=" + config_.device + " io-mode=dmabuf ! "
-        "image/jpeg,width=" + std::to_string(config_.width) + ",height=" + std::to_string(config_.height) +
+    
+    std::string pipeline_str = "fdsrc name=vsrc do-timestamp=true";
+    if (source_fd_ >= 0) {
+        pipeline_str += " fd=" + std::to_string(source_fd_);
+    }
+    pipeline_str += " ! image/jpeg,width=" + std::to_string(config_.width) + ",height=" + std::to_string(config_.height) +
         ",framerate=" + std::to_string(config_.framerate_num) + "/" + std::to_string(config_.framerate_den) + " ! "
         "jpegparse ! "
-        // "mppjpegdec ! "
         "jpegdec ! "
         "videoconvert ! "
         "video/x-raw,format=NV12 ! "

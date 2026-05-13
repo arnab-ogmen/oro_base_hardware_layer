@@ -43,9 +43,9 @@ void video_player_thread(const std::string& zmq_endpoint) {
 
     // We will get the actual width/height from the first frame's FlatBuffer metadata
     GstElement* pipeline = gst_parse_launch(
-        "appsrc name=src is-live=true format=time ! "
+        "appsrc name=src is-live=true format=time stream-type=stream block=true ! "
         "videoconvert ! "
-        "queue max-size-buffers=2 ! "
+        "queue max-size-buffers=2 leaky=downstream ! "
         "autovideosink sync=false",
         nullptr
     );
@@ -88,6 +88,7 @@ void video_player_thread(const std::string& zmq_endpoint) {
 
         GstBuffer* buffer = gst_buffer_new_allocate(nullptr, size, nullptr);
         gst_buffer_fill(buffer, 0, data, size);
+        GST_BUFFER_PTS(buffer) = static_cast<GstClockTime>(frame->timestamp_ns());
 
         GstFlowReturn ret;
         g_signal_emit_by_name(appsrc, "push-buffer", buffer, &ret);
@@ -115,9 +116,9 @@ void audio_player_thread(const std::string& zmq_endpoint) {
     gst_init(nullptr, nullptr);
 
     GstElement* pipeline = gst_parse_launch(
-        "appsrc name=src is-live=true format=time ! "
+        "appsrc name=src is-live=true format=time stream-type=stream block=true ! "
         "audioconvert ! audioresample ! "
-        "queue ! "
+        "queue max-size-buffers=2 leaky=downstream ! "
         "autoaudiosink sync=false",
         nullptr
     );
@@ -159,6 +160,7 @@ void audio_player_thread(const std::string& zmq_endpoint) {
 
         GstBuffer* buffer = gst_buffer_new_allocate(nullptr, size, nullptr);
         gst_buffer_fill(buffer, 0, data, size);
+        GST_BUFFER_PTS(buffer) = static_cast<GstClockTime>(frame->timestamp_ns());
 
         GstFlowReturn ret;
         g_signal_emit_by_name(appsrc, "push-buffer", buffer, &ret);

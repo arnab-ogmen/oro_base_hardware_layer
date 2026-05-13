@@ -11,9 +11,13 @@ namespace media {
 namespace config {
 
 struct VideoConfig {
-    std::string device = "/dev/video2";
-    int width = 3840;
-    int height = 2160;
+    std::string source_device = "/dev/video0";
+    std::string device = "/dev/video11";
+    std::string cv_device = "/dev/video11";
+    std::string videocall_device = "/dev/video12";
+    std::string buffer_device = "/dev/video13";
+    int width = 1280;
+    int height = 720;
     int framerate_num = 30;
     int framerate_den = 1;
     std::string zmq_endpoint = "ipc:///tmp/video.sock";
@@ -47,7 +51,11 @@ struct MediaConfig {
         // Load Video
         if (j.contains("video")) {
             auto& v = j["video"];
-            config.video.device = v.value("device", "/dev/video40");
+            config.video.source_device = v.value("source_device", "/dev/video0");
+            config.video.cv_device = v.value("cv_device", "/dev/video11");
+            config.video.videocall_device = v.value("videocall_device", "/dev/video12");
+            config.video.buffer_device = v.value("buffer_device", "/dev/video13");
+            config.video.device = v.value("device", config.video.cv_device);
             config.video.width = v.value("width", 3840);
             config.video.height = v.value("height", 2160);
             config.video.framerate_num = v.value("framerate_num", 30);

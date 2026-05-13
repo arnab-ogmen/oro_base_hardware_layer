@@ -99,6 +99,11 @@ GstFlowReturn AudioPipeline::on_new_sample(GstElement* sink, gpointer data) {
 
             self->publisher_->publish(builder.GetBufferPointer(), builder.GetSize());
             
+            static uint64_t audio_count = 0;
+            if (audio_count++ % 100 == 0) {
+                spdlog::info("Audio Ingestor: Published samples chunk (rate: {}, ch: {})", rate, channels);
+            }
+            
             gst_buffer_unmap(buffer, &map);
         }
         gst_sample_unref(sample);

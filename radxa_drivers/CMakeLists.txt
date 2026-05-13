@@ -11,6 +11,7 @@ pkg_check_modules(ZMQ REQUIRED libzmq)
 pkg_check_modules(GST REQUIRED gstreamer-1.0 gstreamer-app-1.0)
 find_package(nlohmann_json REQUIRED)
 find_package(spdlog REQUIRED)
+find_package(Threads REQUIRED)
 
 find_program(FLATC_EXECUTABLE NAMES flatc)
 if(NOT FLATC_EXECUTABLE)
@@ -41,6 +42,7 @@ add_custom_target(generate_fbs DEPENDS ${FBS_HEADERS})
 
 include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/radxa_drivers/include
     ${CMAKE_CURRENT_SOURCE_DIR}/../../oro_base_input_layer/include
     ${ZMQ_INCLUDE_DIRS}
     ${GST_INCLUDE_DIRS}
@@ -64,6 +66,7 @@ target_link_libraries(radxa_drivers
 add_executable(video_ingestor
     src/media/video_ingestor/main.cpp
     src/media/video_ingestor/video_pipeline.cpp
+    src/media/cam_splitter/cam_splitter_node.cpp
 )
 add_dependencies(video_ingestor generate_fbs)
 target_link_libraries(video_ingestor

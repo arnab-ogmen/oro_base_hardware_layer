@@ -2,6 +2,7 @@
 #include "common/zmq/zmq_publisher.h"
 #include "common/config/config_parser.h"
 #include "media/video_pipeline.h"
+#include "media/cam_splitter_node.h"
 #include <memory>
 #include <csignal>
 #include <thread>
@@ -26,13 +27,33 @@ int main() {
         try {
             auto config = oro::media::config::MediaConfig::load("../configs/media_config.json");
             v_config = config.video;
-            spdlog::info("Loaded configuration for video device: {}", v_config.device);
+            spdlog::info("Loaded configuration for source device: {}", v_config.source_device);
+            spdlog::info("Loaded configuration for CV sink device: {}", v_config.cv_device);
+            spdlog::info("Loaded configuration for video call sink device: {}", v_config.videocall_device);
+            spdlog::info("Loaded configuration for buffer sink device: {}", v_config.buffer_device);
+            spdlog::info("Video pipeline will use device: {}", v_config.device);
         } catch(const std::exception& e) {
             spdlog::warn("Config load failed, using defaults. Error: {}", e.what());
         }
 
+        oro::media::video::CamSplitterNode splitter(
+            v_config.source_device,
+            v_config.cv_device,
+            v_config.videocall_device,
+            v_config.buffer_device,
+            v_config.width,
+            v_config.height,
+            v_config.framerate_num
+        );
+
+        if (!splitter.start()) {
+            spdlog::error("Failed to start camera splitter.");
+            return 1;
+        }
+
         auto publisher = std::make_shared<oro::media::zmq_ipc::ZmqPublisher>(v_config.zmq_endpoint, v_config.hwm);
         oro::media::video::VideoPipeline pipeline(publisher, v_config);
+        pipeline.set_source_fd(splitter.get_fd());
 
         if (!pipeline.init()) {
             spdlog::error("Failed to initialize video pipeline.");
@@ -46,6 +67,7 @@ int main() {
         }
 
         pipeline.stop();
+        splitter.stop();
         spdlog::info("Video Ingestor Service shut down cleanly.");
 
     } catch (const std::exception& e) {
