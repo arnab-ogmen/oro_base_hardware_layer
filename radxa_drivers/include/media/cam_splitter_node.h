@@ -4,10 +4,16 @@
 #include <atomic>
 #include <thread>
 #include <sys/types.h>
+#include <vector>
 
 namespace oro {
 namespace media {
 namespace video {
+
+struct MmapBuffer {
+    void *start;
+    size_t length;
+};
 
 class CamSplitterNode {
 public:
@@ -17,7 +23,8 @@ public:
                     const std::string& buffer_device,
                     int width,
                     int height,
-                    int framerate_num);
+                    int framerate_num,
+                    const std::string& sink_pixelformat = "MJPG");
     ~CamSplitterNode();
 
     bool start();
@@ -25,7 +32,12 @@ public:
     int get_fd() const;
 
 private:
-    void run();
+    bool openSource();
+    bool openSinks();
+    void captureLoop();
+    void cleanup();
+
+    static int xioctl(int fd, unsigned long request, void *arg);
 
     std::string source_device_;
     std::string cv_device_;
@@ -34,10 +46,19 @@ private:
     int width_;
     int height_;
     int framerate_num_;
-    int source_fd_;
-    pid_t child_pid_;
-    std::atomic<bool> running_;
+    std::string sink_pixelformat_;  ///< "MJPG" or "YUYV", from media_config.json
+
+    int source_fd_{-1};          // /dev/video0 capture fd
+    int sink_fds_[3]{-1,-1,-1};  // video11, video12, video13 write fds
+    int pipe_fds_[2]{-1,-1};     // pipe_fds_[1] = write, [0] = read (→ get_fd())
+
+    static constexpr int NUM_BUFFERS = 4;
+    MmapBuffer buffers_[NUM_BUFFERS]{};
+    int num_buffers_mapped_{0};
+
+    std::atomic<bool> running_{false};
     std::thread worker_;
+    bool streaming_{false};
 };
 
 } // namespace video

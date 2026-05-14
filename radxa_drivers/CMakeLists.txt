@@ -22,6 +22,7 @@ endif()
 set(FBS_SRCS
     ${CMAKE_CURRENT_SOURCE_DIR}/schemas/video_frame.fbs
     ${CMAKE_CURRENT_SOURCE_DIR}/schemas/audio_frame.fbs
+    ${CMAKE_CURRENT_SOURCE_DIR}/schemas/av_frame.fbs
 )
 set(FBS_OUT_DIR ${CMAKE_CURRENT_BINARY_DIR}/generated)
 file(MAKE_DIRECTORY ${FBS_OUT_DIR})
@@ -29,6 +30,7 @@ file(MAKE_DIRECTORY ${FBS_OUT_DIR})
 set(FBS_HEADERS
     ${FBS_OUT_DIR}/video_frame_generated.h
     ${FBS_OUT_DIR}/audio_frame_generated.h
+    ${FBS_OUT_DIR}/av_frame_generated.h
 )
 
 add_custom_command(
@@ -122,9 +124,29 @@ target_link_libraries(stream_player
 )
 target_link_directories(stream_player PRIVATE ${ZMQ_LIBRARY_DIRS} ${GST_LIBRARY_DIRS})
 
+# AV Receiver (Combined A/V subscriber with OpenCV display + ALSA playback)
+pkg_check_modules(OPENCV REQUIRED opencv4)
+find_package(ALSA REQUIRED)
+
+add_executable(av_receiver
+    src/media/av_receiver/main.cpp
+)
+add_dependencies(av_receiver generate_fbs)
+target_include_directories(av_receiver PRIVATE ${OPENCV_INCLUDE_DIRS})
+target_link_libraries(av_receiver
+    PRIVATE
+    ${ZMQ_LIBRARIES}
+    ${OPENCV_LIBRARIES}
+    ${ALSA_LIBRARIES}
+    spdlog::spdlog
+    flatbuffers
+    nlohmann_json::nlohmann_json
+)
+target_link_directories(av_receiver PRIVATE ${ZMQ_LIBRARY_DIRS} ${OPENCV_LIBRARY_DIRS})
+
 
 # Installation rules
-install(TARGETS radxa_drivers video_ingestor audio_ingestor stream_player
+install(TARGETS radxa_drivers video_ingestor audio_ingestor stream_player av_receiver
     LIBRARY DESTINATION lib
     ARCHIVE DESTINATION lib
     RUNTIME DESTINATION bin

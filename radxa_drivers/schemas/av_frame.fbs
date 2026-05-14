@@ -1,0 +1,25 @@
+namespace oro.media;
+
+/// Combined Audio+Video frame for synchronized A/V consumers.
+/// Published on ipc:///tmp/av.sock by the av_receiver after correlating
+/// the separate video and audio streams.
+table AVFrame {
+  timestamp_ns: ulong;         // correlated timestamp (from video frame)
+
+  // ── Video ───────────────────
+  width: uint;
+  height: uint;
+  format: string;              // e.g. "NV12"
+  frame_id: ulong;
+  video_data: [ubyte];
+
+  // ── Audio ───────────────────
+  sample_rate: uint;
+  channels: uint;
+  audio_data: [ubyte];         // S16LE PCM chunk nearest to this video frame
+
+  // ── Sync metadata ──────────
+  av_sync_delta_us: long;      // (video_ts - audio_ts) in microseconds
+}
+
+root_type AVFrame;

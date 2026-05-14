@@ -43,7 +43,8 @@ int main() {
             v_config.buffer_device,
             v_config.width,
             v_config.height,
-            v_config.framerate_num
+            v_config.framerate_num,
+            v_config.sink_pixelformat
         );
 
         if (!splitter.start()) {
