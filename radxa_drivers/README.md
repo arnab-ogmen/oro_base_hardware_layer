@@ -4,19 +4,55 @@ The Radxa A7z Media Middleware is a high-performance, deterministic edge-media i
 
 ## 🏗️ Architecture
 
-This middleware is built on a distributed microservice architecture to ensure fault isolation and modular scaling.
+This middleware is built on a distributed microservice architecture to ensure fault isolation, low-latency, and modular scaling.
+
+```mermaid
+graph TD
+    %% Video Pipeline
+    Cam[Hardware Camera\n/dev/video0] -->|mmap MJPEG| Splitter[CamSplitterNode\nNative C++]
+    Splitter -->|Non-blocking| V11[v4l2loopback CV\n/dev/video11]
+    Splitter -->|Non-blocking| V12[v4l2loopback VideoCall\n/dev/video12]
+    Splitter -->|Non-blocking| V13[v4l2loopback Buffer\n/dev/video13]
+    Splitter -->|Pipe| GstVid[GStreamer Pipeline\nvideo_ingestor]
+    
+    GstVid -->|NV12 FlatBuffer| VidZmq((ipc:///tmp/video.sock))
+    
+    %% Audio Pipeline
+    Mic[USB Mic\nhw:2,0] -->|ALSA| GstAud[GStreamer Pipeline\naudio_ingestor]
+    GstAud -->|S16LE FlatBuffer| AudZmq((ipc:///tmp/audio.sock))
+    
+    %% AV Receiver
+    VidZmq -->|SUB| AVRec[av_receiver\nSpeaker & Display Node]
+    AudZmq -->|SUB| AVRec
+    
+    AVRec -->|cv::imshow| Screen[Display UI]
+    AVRec -->|ALSA API| Spk[Hardware Speaker\nplughw:2,0]
+    AVRec -->|Combined AVFrame| AVZmq((ipc:///tmp/av.sock))
+```
+
+### Components
 
 - **Video Ingestor (`video_ingestor`)**:
-  - Captures from a V4L2 device (e.g., Microdia 4K).
-  - Uses Rockchip MPP (`mppjpegdec`) for hardware-accelerated JPEG decoding.
-  - Pushes `NV12` frames over `ipc:///tmp/video.sock`.
+  - Features a high-performance native C++ `CamSplitterNode` that captures raw MJPEG frames from a V4L2 device (e.g., `/dev/video0`) via zero-copy `mmap`.
+  - Fans out frames to multiple `v4l2loopback` virtual camera sinks (`/dev/video11-13`) for external applications (e.g. OpenCV scripts, video calls).
+  - Bridges the camera feed into a hardware-accelerated GStreamer pipeline using Rockchip MPP (`mppjpegdec`) for JPEG decoding.
+  - Publishes `NV12` frames serialized as FlatBuffers over `ipc:///tmp/video.sock`.
+
 - **Audio Ingestor (`audio_ingestor`)**:
-  - Captures from an ALSA device (e.g., USB PnP Audio Device).
-  - Uses `audioconvert ! audioresample` for dynamic format negotiation with the hardware.
+  - Captures from an ALSA microphone device (e.g., USB PnP Audio Device).
+  - Uses `audioconvert ! audioresample` for dynamic hardware format negotiation.
   - Converts stream to `16000Hz`, `Mono`, `S16LE` PCM.
-  - Pushes raw frames over `ipc:///tmp/audio.sock`.
+  - Publishes raw PCM frames serialized as FlatBuffers over `ipc:///tmp/audio.sock`.
+
+- **AV Receiver & Speaker Driver (`av_receiver`)**:
+  - Acts as the combined consumer node for synchronized audio and video streams.
+  - Receives decoupled streams over ZMQ and dynamically synchronizes them based on `CLOCK_MONOTONIC_RAW` timestamps.
+  - Renders low-latency video with real-time HUD overlays (audio VU meter, A/V sync metrics) using OpenCV.
+  - Directly drives hardware speakers by pumping synchronized PCM chunks to ALSA devices (e.g., `plughw:2,0`).
+  - Re-publishes combined `AVFrame` FlatBuffer payloads over `ipc:///tmp/av.sock` for downstream cognitive modules.
+
 - **Synchronization**: Uses `CLOCK_MONOTONIC_RAW` immediately upon frame capture to provide drift-free correlation between the Audio and Video streams.
-- **Serialization Layer**: FlatBuffers (`schemas/video_frame.fbs`, `schemas/audio_frame.fbs`).
+- **Serialization Layer**: FlatBuffers (`schemas/video_frame.fbs`, `schemas/audio_frame.fbs`, `schemas/av_frame.fbs`).
 - **Configuration**: JSON-based dynamic hardware parameters (`configs/media_config.json`).
 
 ---
@@ -89,6 +125,18 @@ We provide a script (`scripts/phase1_hardware_tests.sh`) to quickly sanity check
 
 **4. Incorrect Hardware Devices**
 - *Fix*: Run `v4l2-ctl --list-devices` for Video and `arecord -l` for Audio to find the correct system bindings. Update `configs/media_config.json` accordingly.
+
+---
+
+## 🚀 Launching the Drivers (Bringup)
+
+To launch all the driver nodes simultaneously (similar to a ROS2 launch file), use the `launch_drivers.py` script. This script automatically starts the `video_ingestor`, `audio_ingestor`, and `av_receiver` in the background, prefixes their logs with distinct colors, and gracefully terminates all processes on `Ctrl+C`.
+
+### Usage
+```bash
+cd scripts
+./launch_drivers.py
+```
 
 ---
 

@@ -304,7 +304,7 @@ int main() {
     };
 
     while (g_running) {
-        zmq::poll(items, 2, 50);  // 50ms timeout to keep cv::waitKey responsive
+        zmq::poll(items, 2, std::chrono::milliseconds(50));  // 50ms timeout
 
         // ── Audio ────────────────────────────────────────────────────────────
         if (items[1].revents & ZMQ_POLLIN) {

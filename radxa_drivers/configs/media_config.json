@@ -14,7 +14,7 @@
     "hwm": 3
   },
   "audio": {
-    "device": "plughw:2,0",
+    "device": "plughw:1,0",
     "rate": 16000,
     "channels": 1,
     "format": "S16LE",
@@ -24,6 +24,6 @@
   "av": {
     "zmq_endpoint": "ipc:///tmp/av.sock",
     "hwm": 3,
-    "audio_playback_device": "plughw:2,0"
+    "audio_playback_device": "plughw:1,0"
   }
 }

@@ -73,15 +73,12 @@ bool CamSplitterNode::start() {
     }
 
     enum v4l2_buf_type type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-    int retry = 0;
-    while (xioctl(source_fd_, VIDIOC_STREAMON, &type) == -1) {
-        if (errno == EPROTO && retry < 3) {
-            spdlog::warn("VIDIOC_STREAMON failed with Protocol error, retrying... ({}/3)", retry + 1);
-            std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            retry++;
-            continue;
+    if (xioctl(source_fd_, VIDIOC_STREAMON, &type) == -1) {
+        if (errno == EPROTO || errno == EIO) {
+            spdlog::warn("VIDIOC_STREAMON failed with {} — startup will not retry", strerror(errno));
+        } else {
+            spdlog::error("VIDIOC_STREAMON failed: {}", strerror(errno));
         }
-        spdlog::error("VIDIOC_STREAMON failed: {}", strerror(errno));
         cleanup();
         running_ = false;
         return false;

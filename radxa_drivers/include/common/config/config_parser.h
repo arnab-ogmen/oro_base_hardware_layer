@@ -39,7 +39,7 @@ struct VideoConfig {
 };
 
 struct AudioConfig {
-    std::string device = "hw:2,0";
+    std::string device = "hw:1,0";
     int rate = 16000;
     int channels = 1;
     std::string format = "S16LE";
@@ -50,7 +50,7 @@ struct AudioConfig {
 struct AVConfig {
     std::string zmq_endpoint = "ipc:///tmp/av.sock";
     int hwm = 3;
-    std::string audio_playback_device = "plughw:2,0";
+    std::string audio_playback_device = "plughw:1,0";
 };
 
 struct MediaConfig {
@@ -89,7 +89,7 @@ struct MediaConfig {
         // Load Audio
         if (j.contains("audio")) {
             auto& a = j["audio"];
-            config.audio.device = a.value("device", "hw:2,0");
+            config.audio.device = a.value("device", "hw:1,0");
             config.audio.rate = a.value("rate", 16000);
             config.audio.channels = a.value("channels", 1);
             config.audio.format = a.value("format", "S16LE");
@@ -102,7 +102,7 @@ struct MediaConfig {
             auto& av = j["av"];
             config.av.zmq_endpoint          = av.value("zmq_endpoint", "ipc:///tmp/av.sock");
             config.av.hwm                   = av.value("hwm", 3);
-            config.av.audio_playback_device = av.value("audio_playback_device", "plughw:2,0");
+            config.av.audio_playback_device = av.value("audio_playback_device", "plughw:1,0");
         }
 
         return config;

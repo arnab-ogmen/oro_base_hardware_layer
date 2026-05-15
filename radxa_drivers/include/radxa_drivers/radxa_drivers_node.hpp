@@ -7,6 +7,7 @@
 #include <vector>
 #include <random>
 #include "data/sensor_payloads.hpp"
+#include "radxa_drivers/drivers/amg8833.h"
 
 namespace oro {
 
@@ -36,11 +37,8 @@ private:
     bool ir_thrower_state_ = false;
     uint64_t last_ir_update_ms_ = 0;
 
-    // Thermal simulation state
-    float heat_source_pos_x_ = 4.0f;
-    float heat_source_pos_y_ = 4.0f;
-    float heat_source_vel_x_ = 0.1f;
-    float heat_source_vel_y_ = 0.05f;
+    // Thermal sensor state
+    amg_handle_t* amg_handle_ = nullptr;
     uint64_t last_thermal_update_ms_ = 0;
 
     // Rolling sequence numbers (4-bit, 0–15)

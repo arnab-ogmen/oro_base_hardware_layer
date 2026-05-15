@@ -1,4 +1,5 @@
 #include "radxa_drivers/radxa_drivers_node.hpp"
+#include "radxa_drivers/drivers/amg8833_regs.h"
 #include "data/topic_registry.hpp"
 #include <chrono>
 #include <cmath>
@@ -19,10 +20,34 @@ void RadxaDriversNode::start() {
   running_ = true;
   last_ir_update_ms_ = now_ms();
   last_thermal_update_ms_ = last_ir_update_ms_;
-  std::cout << "[RadxaDriversNode] Started sensor simulation" << std::endl;
+
+  // Initialize AMG8833
+  amg_config_t cfg;
+  cfg.i2c_dev = "/dev/i2c-7";
+  cfg.i2c_addr = AMG_ADDR_HIGH;
+  cfg.fps = AMG_FPS_10;
+  cfg.hw_avg = AMG_AVG_NONE;
+  cfg.ema_alpha = 0.3f;
+
+  if (amg_init(&cfg, &amg_handle_) != AMG_OK) {
+    std::cerr << "[RadxaDriversNode] Failed to initialize AMG8833 thermal camera"
+              << std::endl;
+    amg_handle_ = nullptr;
+  } else {
+    std::cout << "[RadxaDriversNode] AMG8833 thermal camera initialized"
+              << std::endl;
+  }
+
+  std::cout << "[RadxaDriversNode] Started sensor drivers" << std::endl;
 }
 
-void RadxaDriversNode::stop() { running_ = false; }
+void RadxaDriversNode::stop() {
+  running_ = false;
+  if (amg_handle_) {
+    amg_close(amg_handle_);
+    amg_handle_ = nullptr;
+  }
+}
 
 void RadxaDriversNode::spin_once() {
   if (!running_.load())
@@ -74,60 +99,29 @@ void RadxaDriversNode::publish_treat_ir(uint64_t current_ms) {
 }
 
 void RadxaDriversNode::publish_thermal_array(uint64_t current_ms) {
-    const auto& desc = TOPIC_REGISTRY[TID_THERMAL_ARRAY];
-    ThermalPayload payload{};
-    payload.header.sensor_id = TID_THERMAL_ARRAY;
-    payload.header.seq_num = thermal_seq_;
-    payload.header.timestamp_ms = current_ms;
-
-    thermal_seq_ = (thermal_seq_ + 1) & 0x0F; // 4-bit rolling sequence
-
-  // Simulate Physics-based heat blob
-  // Move heat source
-  heat_source_pos_x_ += heat_source_vel_x_;
-  heat_source_pos_y_ += heat_source_vel_y_;
-
-  // Bounce off walls (8x8 grid)
-  if (heat_source_pos_x_ < 0.5f || heat_source_pos_x_ > 6.5f)
-    heat_source_vel_x_ *= -1.0f;
-  if (heat_source_pos_y_ < 0.5f || heat_source_pos_y_ > 6.5f)
-    heat_source_vel_y_ *= -1.0f;
-
-  float ambient =
-      22.5f + (std::uniform_real_distribution<float>(-0.1f, 0.1f)(rng_));
-  float blob_temp = 36.5f; // Human body temp
-
-  payload.frame.timestamp_ms = static_cast<uint32_t>(current_ms);
-  payload.frame.ambient_temp = ambient;
-  payload.frame.overflow = 0;
-
-  float current_min = 100.0f;
-  float current_max = -100.0f;
-
-  // Fill 8x8 array
-  for (int r = 0; r < 8; ++r) {
-    for (int c = 0; c < 8; ++c) {
-      float dx = c - heat_source_pos_x_;
-      float dy = r - heat_source_pos_y_;
-      float dist_sq = dx * dx + dy * dy;
-
-      // Gaussian kernel for heat blob
-      float heat = (blob_temp - ambient) * std::exp(-dist_sq / 2.0f);
-      float val = ambient + heat;
-
-      // Add some sensor noise
-      val += std::uniform_real_distribution<float>(-0.2f, 0.2f)(rng_);
-
-      payload.frame.pixels[r * 8 + c] = val;
-      if (val < current_min)
-        current_min = val;
-      if (val > current_max)
-        current_max = val;
-    }
+  if (!amg_handle_) {
+    return;
   }
 
-  payload.frame.min_temp = current_min;
-  payload.frame.max_temp = current_max;
+  ::amg_frame_t frame;
+  if (amg_read_frame(amg_handle_, &frame) != AMG_OK) {
+    return;
+  }
+
+  const auto &desc = TOPIC_REGISTRY[TID_THERMAL_ARRAY];
+  ThermalPayload payload{};
+  payload.header.sensor_id = TID_THERMAL_ARRAY;
+  payload.header.seq_num = thermal_seq_;
+  payload.header.timestamp_ms = current_ms;
+
+  thermal_seq_ = (thermal_seq_ + 1) & 0x0F; // 4-bit rolling sequence
+
+  payload.frame.timestamp_ms = frame.timestamp_ms;
+  payload.frame.ambient_temp = frame.ambient_temp;
+  payload.frame.min_temp = frame.min_temp;
+  payload.frame.max_temp = frame.max_temp;
+  payload.frame.overflow = frame.overflow;
+  std::memcpy(payload.frame.pixels, frame.pixels, sizeof(frame.pixels));
 
   // Send multi-part
   sensor_pub_.send(
