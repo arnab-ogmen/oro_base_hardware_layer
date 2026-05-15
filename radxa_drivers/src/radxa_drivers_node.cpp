@@ -17,36 +17,53 @@ RadxaDriversNode::RadxaDriversNode(zmq::socket_t &sensor_pub)
 RadxaDriversNode::~RadxaDriversNode() { stop(); }
 
 void RadxaDriversNode::start() {
-  running_ = true;
-  last_ir_update_ms_ = now_ms();
-  last_thermal_update_ms_ = last_ir_update_ms_;
+  if (running_.load())
+    return;
 
-  // Initialize AMG8833
+  std::cout << "[RadxaDriversNode] Initializing AMG8833 on /dev/i2c-7 (0x69)..."
+            << std::endl;
+
   amg_config_t cfg;
   cfg.i2c_dev = "/dev/i2c-7";
-  cfg.i2c_addr = AMG_ADDR_HIGH;
+  cfg.i2c_addr = AMG_ADDR_HIGH; // 0x69
   cfg.fps = AMG_FPS_10;
-  cfg.hw_avg = AMG_AVG_NONE;
   cfg.ema_alpha = 0.3f;
+  cfg.hw_avg = AMG_AVG_TWICE;
 
   if (amg_init(&cfg, &amg_handle_) != AMG_OK) {
-    std::cerr << "[RadxaDriversNode] Failed to initialize AMG8833 thermal camera"
+    std::cerr << "[RadxaDriversNode] FATAL: AMG8833 initialization failed!"
               << std::endl;
-    amg_handle_ = nullptr;
-  } else {
-    std::cout << "[RadxaDriversNode] AMG8833 thermal camera initialized"
-              << std::endl;
+    return;
   }
 
-  std::cout << "[RadxaDriversNode] Started sensor drivers" << std::endl;
+  std::cout << "[RadxaDriversNode] AMG8833 thermal camera initialized"
+            << std::endl;
+
+  running_ = true;
+  thermal_running_ = true;
+  
+  // Launch background acquisition thread
+  thermal_thread_ = std::make_unique<std::thread>(&RadxaDriversNode::thermal_thread_func, this);
+  
+  std::cout << "[RadxaDriversNode] Started sensor drivers (thermal in background thread)" << std::endl;
 }
 
 void RadxaDriversNode::stop() {
+  if (!running_.load())
+    return;
+
   running_ = false;
+  thermal_running_ = false;
+
+  if (thermal_thread_ && thermal_thread_->joinable()) {
+    thermal_thread_->join();
+  }
+
   if (amg_handle_) {
     amg_close(amg_handle_);
     amg_handle_ = nullptr;
   }
+  std::cout << "[RadxaDriversNode] Stopped sensor drivers" << std::endl;
 }
 
 void RadxaDriversNode::spin_once() {
@@ -98,13 +115,39 @@ void RadxaDriversNode::publish_treat_ir(uint64_t current_ms) {
     send_digital(TID_TREAT_THROWER_IR, ir_thrower_state_, ir_thrower_seq_);
 }
 
+void RadxaDriversNode::thermal_thread_func() {
+  std::cout << "[RadxaDriversNode] Thermal acquisition thread started" << std::endl;
+  
+  while (thermal_running_.load(std::memory_order_relaxed)) {
+    if (amg_handle_) {
+      ::amg_frame_t frame;
+      if (amg_read_frame(amg_handle_, &frame) == AMG_OK) {
+        std::lock_guard<std::mutex> lock(thermal_mtx_);
+        latest_frame_ = frame;
+        frame_ready_ = true;
+      }
+    }
+    // Poll at ~10Hz (matching sensor rate)
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  }
+  
+  std::cout << "[RadxaDriversNode] Thermal acquisition thread exiting" << std::endl;
+}
+
 void RadxaDriversNode::publish_thermal_array(uint64_t current_ms) {
-  if (!amg_handle_) {
-    return;
+  ::amg_frame_t frame;
+  bool has_data = false;
+
+  {
+    std::lock_guard<std::mutex> lock(thermal_mtx_);
+    if (frame_ready_) {
+      frame = latest_frame_;
+      frame_ready_ = false; // Consume the frame
+      has_data = true;
+    }
   }
 
-  ::amg_frame_t frame;
-  if (amg_read_frame(amg_handle_, &frame) != AMG_OK) {
+  if (!has_data) {
     return;
   }
 
@@ -123,7 +166,7 @@ void RadxaDriversNode::publish_thermal_array(uint64_t current_ms) {
   payload.frame.overflow = frame.overflow;
   std::memcpy(payload.frame.pixels, frame.pixels, sizeof(frame.pixels));
 
-  // Send multi-part
+  // Send multi-part (all ZMQ sends now guaranteed to be in main thread)
   sensor_pub_.send(
       zmq::const_buffer(desc.zmq_topic, std::strlen(desc.zmq_topic)),
       zmq::send_flags::sndmore);

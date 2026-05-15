@@ -5,7 +5,10 @@
 #include <atomic>
 #include <string>
 #include <vector>
+#include <condition_variable>
+#include <mutex>
 #include <random>
+#include <thread>
 #include "data/sensor_payloads.hpp"
 #include "radxa_drivers/drivers/amg8833.h"
 
@@ -24,7 +27,19 @@ private:
     void publish_treat_ir(uint64_t current_ms);
     void publish_thermal_array(uint64_t current_ms);
     uint64_t now_ms() const;
+    
+    // ── Thermal Threading ───────────────────────────────────────────
+    void thermal_thread_func();
 
+    std::unique_ptr<std::thread> thermal_thread_;
+    std::atomic<bool> thermal_running_{false};
+    std::mutex thermal_mtx_;
+    
+    // Protected by thermal_mtx_
+    ::amg_frame_t latest_frame_{};
+    bool frame_ready_ = false;
+
+    // Members
     zmq::socket_t& sensor_pub_;
     std::atomic<bool> running_{false};
 
