@@ -19,8 +19,8 @@ KILL_MODES = [
     "force_segfault"
 ]
 
-MIN_DELAY = 5
-MAX_DELAY = 10
+MIN_DELAY = 3
+MAX_DELAY = 5
 
 
 def get_pids(process_name):

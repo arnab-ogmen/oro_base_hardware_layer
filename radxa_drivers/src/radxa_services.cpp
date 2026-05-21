@@ -68,11 +68,11 @@ std::string RadxaServices::handle_photo_capture() {
                        .count();
 
   std::string filename = "ORoBase_IMG_" + std::to_string(timestamp) + ".jpg";
-  std::string full_path = "/home/ogmen/Pictures/Comman_Executor_Images/" + filename;
+  std::string full_path = "/home/radxa/Pictures/Command_Executor_Images/" + filename;
 
   // Use ffmpeg to capture one frame from /dev/video1
   // -y overwrites, -f v4l2 is the format, -i /dev/video1 input, -frames:v 1 capture 1 frame
-  std::string cmd = "ffmpeg -y -f v4l2 -i /dev/video1 -frames:v 1 " + full_path + " > /dev/null 2>&1";
+  std::string cmd = "ffmpeg -y -f v4l2 -i /dev/video13 -frames:v 1 " + full_path + " > /dev/null 2>&1";
 
   int ret = std::system(cmd.c_str());
   bool success = (ret == 0);

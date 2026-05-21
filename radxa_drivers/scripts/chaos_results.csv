@@ -29,3 +29,8 @@ timestamp,node,mode,recovery_time_sec,success
 2026-05-14 13:09:22,audio_ingestor,sigsegv,0.06,True
 2026-05-14 13:09:41,video_ingestor,freeze,10,False
 2026-05-14 13:09:46,av_receiver,sigterm,0.04,True
+2026-05-15 20:37:16,av_receiver,sigkill,0.12,True
+2026-05-15 20:37:36,video_ingestor,sigterm,10,False
+2026-05-15 20:37:42,av_receiver,sigsegv,0.05,True
+2026-05-15 20:38:02,audio_ingestor,freeze,10,False
+2026-05-15 20:38:08,audio_ingestor,sigkill,0.07,True

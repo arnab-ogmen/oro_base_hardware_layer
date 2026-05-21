@@ -85,6 +85,12 @@ bool CamSplitterNode::start() {
     }
     streaming_ = true;
 
+    // Set non-blocking mode after streaming starts for poll/DQBUF operations
+    int flags = fcntl(source_fd_, F_GETFL, 0);
+    if (flags != -1) {
+        fcntl(source_fd_, F_SETFL, flags | O_NONBLOCK);
+    }
+
     worker_ = std::thread([this]() { captureLoop(); });
 
     spdlog::info("CamSplitterNode started with native V4L2 capture.");
@@ -115,7 +121,7 @@ void CamSplitterNode::stop() {
 }
 
 bool CamSplitterNode::openSource() {
-    source_fd_ = open(source_device_.c_str(), O_RDWR | O_NONBLOCK, 0);
+    source_fd_ = open(source_device_.c_str(), O_RDWR, 0);
     if (source_fd_ < 0) {
         spdlog::error("Cannot open source device {}: {}", source_device_, strerror(errno));
         return false;
