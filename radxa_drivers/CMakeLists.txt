@@ -9,6 +9,7 @@ add_compile_options(-Wall -Wextra -Wpedantic -Werror=return-type)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(ZMQ REQUIRED libzmq)
 pkg_check_modules(GST REQUIRED gstreamer-1.0 gstreamer-app-1.0)
+pkg_check_modules(GPIOD REQUIRED libgpiod)
 find_package(nlohmann_json REQUIRED)
 find_package(spdlog REQUIRED)
 find_package(Threads REQUIRED)
@@ -48,19 +49,23 @@ include_directories(
     ${CMAKE_CURRENT_SOURCE_DIR}/../../oro_base_input_layer/include
     ${ZMQ_INCLUDE_DIRS}
     ${GST_INCLUDE_DIRS}
+    ${GPIOD_INCLUDE_DIRS}
     ${FBS_OUT_DIR}
 )
 
 # Existing radxa_drivers library
-add_library(radxa_drivers SHARED
+add_library(radxa_drivers STATIC
     src/radxa_services.cpp
     src/radxa_drivers_node.cpp
     src/amg8833.c
+    src/gpio_sensor.cpp
+    src/stepper_driver.cpp
 )
 
 target_link_libraries(radxa_drivers
     PRIVATE
     ${ZMQ_LIBRARIES}
+    ${GPIOD_LIBRARIES}
 )
 
 # --- Media Stack ---
