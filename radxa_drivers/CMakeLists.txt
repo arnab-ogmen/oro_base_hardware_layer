@@ -60,6 +60,7 @@ add_library(radxa_drivers STATIC
     src/amg8833.c
     src/gpio_sensor.cpp
     src/stepper_driver.cpp
+    src/treat_dispenser.cpp
 )
 
 target_link_libraries(radxa_drivers

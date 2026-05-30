@@ -3,6 +3,7 @@
 
 #include <string>
 #include <nlohmann/json.hpp>
+#include "radxa_drivers/treat_dispenser.hpp"
 
 namespace oro {
 
@@ -18,7 +19,7 @@ public:
 private:
     // Modular Command Handlers
     static std::string handle_feed(float grams);
-    static std::string handle_treat_dispense(float count);
+    static std::string handle_treat_dispense(float count, int speed = 3);
     static std::string handle_photo_capture();
     static std::string handle_live_session_start();
     static std::string handle_live_session_end();
@@ -33,8 +34,10 @@ private:
     static int playback_pid;
     static int current_track;
     static bool is_paused;
+    static TreatDispenser dispenser;
 };
 
 } // namespace oro
 
 #endif // RADXA_SERVICES_HPP
+

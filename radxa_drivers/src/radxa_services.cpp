@@ -12,6 +12,7 @@ namespace oro {
 int RadxaServices::playback_pid = -1;
 int RadxaServices::current_track = 0;
 bool RadxaServices::is_paused = false;
+TreatDispenser RadxaServices::dispenser;
 
 std::string RadxaServices::process_command(const nlohmann::json &cmd) {
   std::string topic = cmd.value("topic", "");
@@ -23,7 +24,8 @@ std::string RadxaServices::process_command(const nlohmann::json &cmd) {
   if (topic == "/commands/feed") {
     return handle_feed(val);
   } else if (topic == "/commands/treat/dispense") {
-    return handle_treat_dispense(val);
+    int speed = cmd.value("speed", 3);
+    return handle_treat_dispense(val, speed);
   } else if (topic == "/commands/photo_capture") {
     return handle_photo_capture();
   } else if (topic == "/commands/live_session/start") {
@@ -51,10 +53,51 @@ std::string RadxaServices::handle_feed(float grams) {
   return res.dump();
 }
 
-std::string RadxaServices::handle_treat_dispense(float count) {
-  std::cout << "[RadxaServices] Executing Treat Dispense: " << count << " units" << std::endl;
+std::string RadxaServices::handle_treat_dispense(float count, int speed) {
+  std::cout << "[RadxaServices] Executing Treat Dispense: " << count << " units at speed level " << speed << std::endl;
+  
+  if (!dispenser.init()) {
+    nlohmann::json res = {
+        {"status", "failed"}, {"error", "hardware_init_error"}};
+    return res.dump();
+  }
+
+  DispenseResult result = dispenser.dispense(speed, static_cast<int>(count));
+  bool success = (result == DispenseResult::SUCCESS ||
+                  result == DispenseResult::DIAG_OK ||
+                  result == DispenseResult::DIAG_RETRACT_OK);
+
   nlohmann::json res = {
-      {"status", "success"}, {"operation", "treat_dispense"}, {"count", count}};
+      {"status", success ? "success" : "failed"}, 
+      {"operation", "treat_dispense"}, 
+      {"count", count}};
+
+  if (!success) {
+      if (result == DispenseResult::NOT_INITIALIZED) {
+          res["error"] = "not_initialized";
+      } else if (result == DispenseResult::INVALID_QUANTITY) {
+          res["error"] = "invalid_quantity";
+      } else if (result == DispenseResult::LEVEL_EMPTY) {
+          res["error"] = "level_empty";
+      } else if (result == DispenseResult::EJECT_FAILED) {
+          res["error"] = "eject_failed";
+      } else if (result == DispenseResult::LOAD_FAILED) {
+          res["error"] = "load_failed";
+      } else if (result == DispenseResult::DIAG_ALL_BLOCKED) {
+          res["error"] = "diagnostics_all_blocked";
+      } else if (result == DispenseResult::DIAG_RETRACT_FAILED) {
+          res["error"] = "diagnostics_retract_failed";
+      } else {
+          res["error"] = "unknown_error";
+      }
+  } else {
+      if (result == DispenseResult::DIAG_OK) {
+          res["diagnostics"] = "ok";
+      } else if (result == DispenseResult::DIAG_RETRACT_OK) {
+          res["diagnostics"] = "retract_ok";
+      }
+  }
+
   res["completed_at"] = std::chrono::system_clock::to_time_t(std::chrono::system_clock::now());
   return res.dump();
 }
