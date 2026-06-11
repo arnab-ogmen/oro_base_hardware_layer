@@ -1,4 +1,5 @@
 #include "radxa_drivers/radxa_services.hpp"
+#include <fcntl.h>
 #include <chrono>
 #include <csignal>
 #include <iostream>
@@ -212,7 +213,22 @@ std::string RadxaServices::handle_audio_command(int action_code) {
 
     pid_t pid = fork();
     if (pid == 0) {
-      // Child: Launch ffplay
+      // Child: Close inherited file descriptors to avoid ZMQ / DB conflicts
+      int open_max = sysconf(_SC_OPEN_MAX);
+      if (open_max < 0) open_max = 1024;
+      for (int i = 3; i < open_max; ++i) {
+        close(i);
+      }
+
+      // Redirect stdout and stderr to /dev/null
+      int devnull = open("/dev/null", O_WRONLY);
+      if (devnull >= 0) {
+        dup2(devnull, STDOUT_FILENO);
+        dup2(devnull, STDERR_FILENO);
+        close(devnull);
+      }
+
+      // Launch ffplay
       execlp("ffplay", "ffplay", "-nodisp", "-autoexit", track_path.c_str(),
              NULL);
       _exit(1); // Should not reach here
@@ -255,12 +271,17 @@ std::string RadxaServices::handle_audio_command(int action_code) {
 }
 
 void RadxaServices::kill_playback() {
+  std::cout << "[RadxaServices] kill_playback entry, pid=" << playback_pid << std::endl;
   if (playback_pid > 0) {
+    std::cout << "[RadxaServices] Sending SIGTERM to " << playback_pid << std::endl;
     kill(playback_pid, SIGTERM);
+    std::cout << "[RadxaServices] waitpid call starting" << std::endl;
     waitpid(playback_pid, NULL, WNOHANG);
+    std::cout << "[RadxaServices] waitpid call completed" << std::endl;
     playback_pid = -1;
     is_paused = false;
   }
+  std::cout << "[RadxaServices] kill_playback exit" << std::endl;
 }
 
 } // namespace oro
