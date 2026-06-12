@@ -8,10 +8,22 @@
 #include <chrono>
 
 bool g_running = true;
+std::atomic<bool> g_privacy_mode{false};
+std::atomic<bool> g_privacy_changed{false};
 
 void signal_handler(int signum) {
     spdlog::info("Interrupt signal ({}) received.", signum);
     g_running = false;
+}
+
+void sigusr1_handler(int) {
+    g_privacy_mode = true;
+    g_privacy_changed = true;
+}
+
+void sigusr2_handler(int) {
+    g_privacy_mode = false;
+    g_privacy_changed = true;
 }
 
 int main() {
@@ -20,6 +32,8 @@ int main() {
 
     std::signal(SIGINT, signal_handler);
     std::signal(SIGTERM, signal_handler);
+    std::signal(SIGUSR1, sigusr1_handler);
+    std::signal(SIGUSR2, sigusr2_handler);
 
     try {
         oro::media::config::AudioConfig a_config;
@@ -42,6 +56,15 @@ int main() {
         pipeline.start();
 
         while (g_running) {
+            if (g_privacy_changed.exchange(false)) {
+                if (g_privacy_mode) {
+                    spdlog::info("Privacy Mode Enabled: suspending audio capture.");
+                    pipeline.set_privacy_mode(true);
+                } else {
+                    spdlog::info("Privacy Mode Disabled: resuming audio capture.");
+                    pipeline.set_privacy_mode(false);
+                }
+            }
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
         }
 

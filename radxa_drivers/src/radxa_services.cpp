@@ -112,7 +112,7 @@ std::string RadxaServices::handle_photo_capture() {
                        .count();
 
   std::string filename = "ORoBase_IMG_" + std::to_string(timestamp) + ".jpg";
-  std::string full_path = "/home/radxa/Pictures/Command_Executor_Images/" + filename;
+  std::string full_path = "/home/radxa/oro_base_images/" + filename;
 
   // Use ffmpeg to capture one frame from /dev/video1
   // -y overwrites, -f v4l2 is the format, -i /dev/video1 input, -frames:v 1 capture 1 frame
@@ -203,13 +203,13 @@ std::string RadxaServices::handle_audio_command(int action_code) {
 
     std::string track_path;
     if (action_code == 1)
-      track_path = "/home/radxa/Music/breaking_bad_intro.mp3";
+      track_path = "/home/radxa/oro_base_video_audio/breaking_bad_intro.mp3";
     else if (action_code == 2)
-      track_path = "/home/radxa/Music/dandelions_violin.mp3";
+      track_path = "/home/radxa/oro_base_video_audio/dandelions_violin.mp3";
     else if (action_code == 3)
-      track_path = "/home/radxa/Music/I_think_they_call_this_love.mp3";
+      track_path = "/home/radxa/oro_base_video_audio/I_think_they_call_this_love.mp3";
     else
-      track_path = "/home/radxa/Music/I_think_they_call_this_love.mp3";
+      track_path = "/home/radxa/oro_base_video_audio/I_think_they_call_this_love.mp3";
 
     pid_t pid = fork();
     if (pid == 0) {

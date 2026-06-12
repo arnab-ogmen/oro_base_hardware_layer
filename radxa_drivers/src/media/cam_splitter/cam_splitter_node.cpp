@@ -40,6 +40,46 @@ int CamSplitterNode::get_fd() const {
     return pipe_fds_[0];
 }
 
+void CamSplitterNode::set_privacy_mode(bool enable) {
+    if (enable) {
+        if (!privacy_active_.exchange(true)) {
+            spdlog::info("CamSplitterNode: Enabling privacy mode...");
+            if (streaming_ && source_fd_ >= 0) {
+                enum v4l2_buf_type type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+                if (xioctl(source_fd_, VIDIOC_STREAMOFF, &type) == -1) {
+                    spdlog::error("VIDIOC_STREAMOFF failed in privacy mode: {}", strerror(errno));
+                } else {
+                    streaming_ = false;
+                    spdlog::info("CamSplitterNode: Hardware streaming stopped.");
+                }
+            }
+        }
+    } else {
+        if (privacy_active_.exchange(false)) {
+            spdlog::info("CamSplitterNode: Disabling privacy mode...");
+            if (!streaming_ && source_fd_ >= 0) {
+                // Re-queue all buffers
+                for (int i = 0; i < num_buffers_mapped_; ++i) {
+                    struct v4l2_buffer buf{};
+                    buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+                    buf.memory = V4L2_MEMORY_MMAP;
+                    buf.index = i;
+                    if (xioctl(source_fd_, VIDIOC_QBUF, &buf) == -1) {
+                        spdlog::error("VIDIOC_QBUF failed during resume for buffer {}: {}", i, strerror(errno));
+                    }
+                }
+                enum v4l2_buf_type type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+                if (xioctl(source_fd_, VIDIOC_STREAMON, &type) == -1) {
+                    spdlog::error("VIDIOC_STREAMON failed in privacy mode: {}", strerror(errno));
+                } else {
+                    streaming_ = true;
+                    spdlog::info("CamSplitterNode: Hardware streaming resumed.");
+                }
+            }
+        }
+    }
+}
+
 int CamSplitterNode::xioctl(int fd, unsigned long request, void *arg) {
     int r;
     do {
@@ -258,6 +298,10 @@ bool CamSplitterNode::openSinks() {
 
 void CamSplitterNode::captureLoop() {
     while (running_) {
+        if (privacy_active_) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            continue;
+        }
         struct pollfd fds;
         fds.fd = source_fd_;
         fds.events = POLLIN;

@@ -20,6 +20,7 @@ public:
     void start();
     void stop();
     void set_source_fd(int fd);
+    void set_privacy_mode(bool enable);
 
 private:
     static GstFlowReturn on_new_sample(GstElement* sink, gpointer data);

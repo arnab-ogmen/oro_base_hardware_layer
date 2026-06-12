@@ -30,6 +30,7 @@ public:
     bool start();
     void stop();
     int get_fd() const;
+    void set_privacy_mode(bool enable);
 
 private:
     bool openSource();
@@ -59,6 +60,7 @@ private:
     std::atomic<bool> running_{false};
     std::thread worker_;
     bool streaming_{false};
+    std::atomic<bool> privacy_active_{false};
 };
 
 } // namespace video

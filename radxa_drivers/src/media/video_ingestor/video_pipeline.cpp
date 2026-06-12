@@ -74,6 +74,18 @@ void VideoPipeline::stop() {
     }
 }
 
+void VideoPipeline::set_privacy_mode(bool enable) {
+    if (pipeline_) {
+        if (enable) {
+            gst_element_set_state(pipeline_, GST_STATE_READY);
+            spdlog::info("Video pipeline paused (privacy mode).");
+        } else {
+            gst_element_set_state(pipeline_, GST_STATE_PLAYING);
+            spdlog::info("Video pipeline resumed (privacy mode).");
+        }
+    }
+}
+
 GstFlowReturn VideoPipeline::on_new_sample(GstElement* sink, gpointer data) {
     VideoPipeline* self = static_cast<VideoPipeline*>(data);
     GstSample* sample = gst_app_sink_pull_sample(GST_APP_SINK(sink));

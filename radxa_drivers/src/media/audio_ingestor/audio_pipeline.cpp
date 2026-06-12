@@ -66,6 +66,18 @@ void AudioPipeline::stop() {
     }
 }
 
+void AudioPipeline::set_privacy_mode(bool enable) {
+    if (pipeline_) {
+        if (enable) {
+            gst_element_set_state(pipeline_, GST_STATE_READY);
+            spdlog::info("Audio pipeline suspended (set to READY state, keeping device occupied).");
+        } else {
+            gst_element_set_state(pipeline_, GST_STATE_PLAYING);
+            spdlog::info("Audio pipeline resumed (set to PLAYING state).");
+        }
+    }
+}
+
 GstFlowReturn AudioPipeline::on_new_sample(GstElement* sink, gpointer data) {
     AudioPipeline* self = static_cast<AudioPipeline*>(data);
     GstSample* sample = gst_app_sink_pull_sample(GST_APP_SINK(sink));
