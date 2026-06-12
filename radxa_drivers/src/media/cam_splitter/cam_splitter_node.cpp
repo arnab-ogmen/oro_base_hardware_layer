@@ -55,7 +55,7 @@ void CamSplitterNode::set_privacy_mode(bool enable) {
             }
         }
     } else {
-        if (privacy_active_.exchange(false)) {
+        if (privacy_active_.load()) {
             spdlog::info("CamSplitterNode: Disabling privacy mode...");
             if (!streaming_ && source_fd_ >= 0) {
                 // Re-queue all buffers
@@ -64,8 +64,16 @@ void CamSplitterNode::set_privacy_mode(bool enable) {
                     buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
                     buf.memory = V4L2_MEMORY_MMAP;
                     buf.index = i;
-                    if (xioctl(source_fd_, VIDIOC_QBUF, &buf) == -1) {
-                        spdlog::error("VIDIOC_QBUF failed during resume for buffer {}: {}", i, strerror(errno));
+                    
+                    if (xioctl(source_fd_, VIDIOC_QUERYBUF, &buf) == -1) {
+                        spdlog::error("VIDIOC_QUERYBUF failed during resume for buffer {}: {}", i, strerror(errno));
+                        continue;
+                    }
+                    
+                    if (!(buf.flags & V4L2_BUF_FLAG_QUEUED)) {
+                        if (xioctl(source_fd_, VIDIOC_QBUF, &buf) == -1) {
+                            spdlog::error("VIDIOC_QBUF failed during resume for buffer {}: {}", i, strerror(errno));
+                        }
                     }
                 }
                 enum v4l2_buf_type type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
@@ -76,6 +84,7 @@ void CamSplitterNode::set_privacy_mode(bool enable) {
                     spdlog::info("CamSplitterNode: Hardware streaming resumed.");
                 }
             }
+            privacy_active_.store(false);
         }
     }
 }
@@ -323,6 +332,7 @@ void CamSplitterNode::captureLoop() {
 
         if (xioctl(source_fd_, VIDIOC_DQBUF, &buf) == -1) {
             if (errno == EAGAIN) continue;
+            if (errno == EINVAL && (!running_ || privacy_active_)) continue;
             spdlog::error("VIDIOC_DQBUF failed: {}", strerror(errno));
             break;
         }
@@ -350,6 +360,7 @@ void CamSplitterNode::captureLoop() {
 
         // Re-queue buffer
         if (xioctl(source_fd_, VIDIOC_QBUF, &buf) == -1) {
+            if (errno == EINVAL && (!running_ || privacy_active_)) continue;
             spdlog::error("VIDIOC_QBUF failed after processing: {}", strerror(errno));
             break;
         }
