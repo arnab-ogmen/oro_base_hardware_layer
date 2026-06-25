@@ -238,7 +238,7 @@ gantt
 The firmware runs a continuous `processIncomingCommands()` loop that:
 1. Scans UART RX buffer for `0xAA` start byte
 2. Validates CRC-8 on candidate 8-byte frame
-3. Extracts `MSG_COMMAND` packets → dispatches by PID
+3. Extracts `MSG_CONTROL` packets → dispatches by PID
 4. Executes actuator logic (e.g., camera rotation ±90°)
 5. Sends `MSG_ACK` with matching sequence number and PID only after physical actuation completes (1–2s delay).
 
@@ -247,7 +247,7 @@ sequenceDiagram
     participant Host as Radxa Host (C++)
     participant MCU as ESP32-S3 Firmware
 
-    Host->>MCU: MSG_COMMAND [Seq=3, PID=3, Val=45.00°]
+    Host->>MCU: MSG_CONTROL [Seq=3, PID=3, Val=45.00°]
     MCU->>MCU: Clamp angle to ±90°
     MCU->>MCU: Update encoder_ticks
     MCU->>MCU: Simulation Delay (e.g., 2s)

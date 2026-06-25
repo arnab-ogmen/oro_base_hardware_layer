@@ -61,6 +61,7 @@ add_library(radxa_drivers STATIC
     src/gpio_sensor.cpp
     src/stepper_driver.cpp
     src/treat_dispenser.cpp
+    src/camhead_rotation.cpp
 )
 
 target_link_libraries(radxa_drivers

@@ -955,7 +955,7 @@ void processIncomingCommands() {
       SensorID sid = (SensorID)GET_ID(cand->id_seq);
       int32_t val = extract_value_i32(cand->value);
 
-      if (type == MSG_COMMAND) {
+      if (type == MSG_CONTROL) {
         uint8_t id = GET_ID(cand->id_seq);
         uint8_t seq = GET_SEQ(cand->id_seq);
 

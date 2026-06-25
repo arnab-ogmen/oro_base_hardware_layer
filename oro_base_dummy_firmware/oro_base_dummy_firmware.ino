@@ -441,7 +441,7 @@ void processIncomingCommands() {
       uint8_t type = GET_MSG_TYPE(cand->msg_type);
       int32_t val = extract_value_i32(cand->value);
 
-      if (type == MSG_COMMAND) {
+      if (type == MSG_CONTROL) {
         uint8_t id = GET_ID(cand->id_seq);
         uint8_t seq = GET_SEQ(cand->id_seq);
 

@@ -18,7 +18,7 @@ All communication over UART uses a fixed-size 8-byte packet structure.
 - `0x01`: **MSG_SENSOR_DATA** (MCU -> Host)
 - `0x02`: **MSG_PERIPHERAL_STATE** (MCU -> Host)
 - `0x03`: **MSG_HEARTBEAT** (MCU -> Host)
-- `0x04`: **MSG_COMMAND** (Host -> MCU)
+- `0x04`: **MSG_CONTROL** (Host -> MCU)
 - `0x05`: **MSG_ACK** (MCU -> Host)
 
 ---
@@ -92,7 +92,7 @@ All communication over UART uses a fixed-size 8-byte packet structure.
 | 45 | `/status/camera_rotation/servo_motor` | DIGITAL | 0x06 | 0: Disengaged, 1: Engaged |
 
 ### 3.4 Command Topics (/commands/...)
-*Source: Host → MCU via MSG_COMMAND (Except Host-Only Services)*
+*Source: Host → MCU via MSG_CONTROL (Except Host-Only Services)*
 
 | TID | ZMQ Topic | Target | PID | Packing |
 | :--- | :--- | :--- | :--- | :--- |
@@ -117,7 +117,7 @@ All communication over UART uses a fixed-size 8-byte packet structure.
 
 ## 4. Response & Validation
 
-Upon receiving a `MSG_COMMAND`, the FW issues a `MSG_ACK` packet.
+Upon receiving a `MSG_CONTROL`, the FW issues a `MSG_ACK` packet.
 
 ### ACK Status Codes
 - `0`: **ACK_SUCCESS** - Command received and action initiated/completed.
