@@ -58,7 +58,7 @@ Identifies the purpose of the packet.
 - `0x01`: `MSG_SENSOR_DATA` (Telemetry from SID)
 - `0x02`: `MSG_PERIPHERAL_STATE` (Status update from PID)
 - `0x03`: `MSG_HEARTBEAT` (Alive signal)
-- `0x04`: `MSG_CONTROL` (Request to PID)
+- `0x04`: `MSG_COMMAND` (Request to PID)
 - `0x05`: `MSG_ACK` (Confirmation of command)
 
 ### 3.3 Sequence Numbers (Byte 2, Bits 7:4)
@@ -108,7 +108,7 @@ sequenceDiagram
     participant Host as ORo Radxa (C++)
     participant MCU as ESP32-S3 (Firmware)
 
-    Host->>MCU: MSG_CONTROL [Seq=1, PID=3, Val=90.0]
+    Host->>MCU: MSG_COMMAND [Seq=1, PID=3, Val=90.0]
     Note right of Host: Blocks for ACK
     MCU->>MCU: Execute Motor Movement
     MCU->>Host: MSG_ACK [Seq=1, PID=3]

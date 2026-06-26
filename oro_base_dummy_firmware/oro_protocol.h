@@ -14,7 +14,7 @@ static const size_t PACKET_SIZE = 8;
 static const uint8_t MSG_SENSOR_DATA = 0x01;
 static const uint8_t MSG_PERIPHERAL_STATE = 0x02;
 static const uint8_t MSG_HEARTBEAT = 0x03;
-static const uint8_t MSG_CONTROL = 0x04;
+static const uint8_t MSG_COMMAND = 0x04;
 static const uint8_t MSG_ACK = 0x05;
 
 // ── Priority Levels ────────────────────────────────────────────────────────
